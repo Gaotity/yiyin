@@ -643,9 +643,13 @@ All listed npm dependencies are exact pins. Cargo dependencies are locked in `Ca
 - `vite@8.1.4`
 - `@vitejs/plugin-react@6.0.3`
 - `typescript@5.9.3`
+- `@types/react@19.2.17`
+- `@types/react-dom@19.2.3`
 - `@biomejs/biome@2.5.4`
 - `vitest@4.1.10`
 - `@testing-library/react@16.3.2`
+- `@testing-library/dom@10.4.1`
+- `jsdom@29.1.1`
 - `@playwright/test@1.61.1`
 - `@tauri-apps/cli@2.11.4`
 
