@@ -1,7 +1,9 @@
 /* eslint-disable node/prefer-global/process */
 import type { BrowserWindowConstructorOptions } from 'electron'
 
+import fs from 'node:fs'
 import { release } from 'node:os'
+import path from 'node:path'
 import { Logger } from '@modules/logger'
 import { createWindow } from '@root/main/create-window'
 import routerConfig from '@root/router-config'
@@ -14,6 +16,12 @@ import { app, BrowserWindow } from 'electron'
 const isDev = import.meta.env.DEV
 const log = new Logger('App')
 const imgToolLog = new Logger('ImgToolQueue')
+
+if (app.isPackaged && process.env.YIYIN_FIXTURE_MODE) {
+  throw new Error('Fixture mode is unavailable in packaged builds')
+}
+
+const fixtureMode = !app.isPackaged && process.env.YIYIN_FIXTURE_MODE === '1'
 
 export default class Application {
   win: BrowserWindow
@@ -71,6 +79,17 @@ export default class Application {
       throw new Error('请初始化 Application')
     }
 
+    if (fixtureMode) {
+      const output = process.env.YIYIN_FIXTURE_OUTPUT
+      if (!output) {
+        throw new Error('YIYIN_FIXTURE_OUTPUT is required')
+      }
+
+      config.output = path.resolve(output)
+      config.cacheDir = path.join(config.output, '.cache')
+      fs.mkdirSync(config.cacheDir, { recursive: true })
+    }
+
     await this.createDefWin()
     query.use(this.win)
     open.use(this.win)
@@ -85,9 +104,11 @@ export default class Application {
       })
     }
 
-    this.win.on('ready-to-show', () => {
-      this.checkAssetsUpdate()
-    })
+    if (!fixtureMode) {
+      this.win.on('ready-to-show', () => {
+        this.checkAssetsUpdate()
+      })
+    }
 
     imageToolQueue.on(async (imgTool) => {
       if (imgTool) {

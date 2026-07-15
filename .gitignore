@@ -1,4 +1,5 @@
 node_modules
+.pnpm-store
 out
 dist-electron
 .idea
@@ -8,6 +9,7 @@ images
 node_modules
 dist
 tests/coverage
+test-results
 
 # Log files
 npm-debug.log*
