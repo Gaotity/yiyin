@@ -20,8 +20,8 @@ export function tryAsyncCatch<T = any>(p: Promise<T>, defV?: T, errCb?: (e: Erro
 }
 
 export function usePromise<T = any>(): [Promise<T>, (value: T | PromiseLike<T>) => void, (reason?: any) => void] {
-  let res: (value: T | PromiseLike<T>) => void
-  let rej: (reason?: any) => void
+  let res!: (value: T | PromiseLike<T>) => void
+  let rej!: (reason?: unknown) => void
   const pro = new Promise<T>((resolve, reject) => {
     res = resolve
     rej = reject

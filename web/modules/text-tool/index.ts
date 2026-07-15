@@ -1,4 +1,4 @@
-import type { Exif } from '@modules/exiftool/interface'
+import type { ExifData } from '@common/models/exif'
 import type { IFontParam, IImgFileInfo, ISlotInfo, ITextOption, TextInfo, TextToolOption, TFontParam } from './interface'
 import { matchFields, roundDecimalPlaces } from '@common/utils'
 import { getFieldTempInfo, getTextTempList } from '@web/modules/temp-field'
@@ -6,11 +6,11 @@ import { getFieldTempInfo, getTextTempList } from '@web/modules/temp-field'
 import { createCanvas, loadImage } from '@web/util/util'
 
 export class TextTool {
-  private exif: Exif
+  private exif: ExifData
 
   private opt: TextToolOption
 
-  constructor(exif: Exif, opt: TextToolOption) {
+  constructor(exif: ExifData, opt: TextToolOption) {
     this.exif = exif
     this.opt = opt
   }
@@ -20,7 +20,6 @@ export class TextTool {
     const fieldTemps = await getFieldTempInfo(this.exif, {
       bgHeight: this.opt.bgHeight,
       fields: this.opt.fields,
-      logoPath: this.opt.logoPath,
     })
     const textTempList = getTextTempList(this.opt.temps, {
       bgHeight: this.opt.bgHeight,
@@ -34,14 +33,14 @@ export class TextTool {
       let text = i.temp.trim()
       if (!text) continue
 
-      const textList = []
-      const slotInfoList = []
+      const textList: (ISlotInfo | string)[] = []
+      const slotInfoList: (ISlotInfo | string)[] = []
       const fields = matchFields(text)
 
       if (fields && Object.keys(fields).length) {
-        for (const field in fields) {
-          const { temp } = fields[field]
+        for (const { field, temp } of Object.values(fields)) {
           const fieldTemp = fieldTemps[field]
+          if (!fieldTemp) continue
           text = text.replace(temp, fieldTemp.show ? '{---}' : '')
 
           if (!fieldTemp.show) {
@@ -74,7 +73,7 @@ export class TextTool {
         const _arr = text.trim().split('{---}')
 
         if (
-          (_arr.length === 1 && !_arr[0].trim())
+          (_arr.length === 1 && !(_arr[0] ?? '').trim())
           || (_arr.length > 1 && !slotInfoList.filter(Boolean).length)
         ) {
           continue
@@ -82,7 +81,7 @@ export class TextTool {
 
         for (let j = 0; j < _arr.length; j++) {
           const slotInfo = slotInfoList[j]
-          let commonText = _arr[j]
+          let commonText = _arr[j] ?? ''
 
           if (i.font.caseType === 'lowcase') {
             commonText = commonText.toLowerCase()
@@ -91,7 +90,7 @@ export class TextTool {
             commonText = commonText.toUpperCase()
           }
 
-          if (typeof slotInfo === 'string' || !(slotInfo as any)?.value) {
+          if (!slotInfo || typeof slotInfo === 'string' || !slotInfo.value) {
             textList.push(commonText)
           }
           else {
@@ -104,12 +103,13 @@ export class TextTool {
       }
 
       if (textList.length) {
-        imgFileInfoList.push(this.createTextImg(textList, {
+        const image = this.createTextImg(textList, {
           verticalAlign: i.verticalAlign,
           font: i.font,
           height: i.height,
           bgHeight: this.opt.bgHeight,
-        }))
+        })
+        if (image) imgFileInfoList.push(image)
       }
     }
 
@@ -119,11 +119,12 @@ export class TextTool {
   private genCanvas(w: number, h: number) {
     const can = createCanvas(w, h)
     const ctx = can.getContext('2d')
+    if (!ctx) throw new Error('Canvas 2D context is unavailable')
 
     return { can, ctx }
   }
 
-  private createTextImg(textList: (ISlotInfo | string)[], opts: ITextOption): IImgFileInfo {
+  private createTextImg(textList: (ISlotInfo | string)[], opts: ITextOption): IImgFileInfo | null {
     textList = textList.filter(Boolean)
 
     if (!textList.length) {
@@ -172,7 +173,7 @@ export class TextTool {
     const baseline = Math.ceil(textInfo.actualBoundingBoxAscent)
 
     // TODO: 后续去掉默认的50高度，采用文本模板高度定义
-    can.height = opts.height || Math.ceil(Math.max(textInfo.actualBoundingBoxAscent + textInfo.actualBoundingBoxDescent + defTextMargin * 2, maxFontParam.size))
+    can.height = opts.height || Math.ceil(Math.max(textInfo.actualBoundingBoxAscent + textInfo.actualBoundingBoxDescent + defTextMargin * 2, maxFontParam.size ?? 0))
     can.width = textList.reduce((n, i, j) => {
       if (!i) return n
 
@@ -294,7 +295,7 @@ export class TextTool {
       font += `${_opts.font}, `
     }
 
-    font += 'PingFang SC'
+    font += 'system-ui, sans-serif'
 
     return font
   }
@@ -310,7 +311,7 @@ export class TextTool {
         }
 
         // 使用最大的字体
-        if (maxFontParam.size < font.size) {
+        if ((maxFontParam.size ?? 0) < (font.size ?? 0)) {
           maxFontParam.size = font.size
         }
       }

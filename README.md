@@ -1,77 +1,43 @@
-# 壹印
+# Yiyin
 
-> 这是一个直接生成图片印框的工具
->
-> 无任何水印，本软件始终开源免费
->
-> 如果软件对你有帮助可以点个Star，或者[请我喝杯奶茶可以吗](#可以请我喝杯奶茶吗)
->
-> 如果软件的效果有什么需要改进的地方
->
-> 或者你有什么新的想法
->
-> 可以在ISSUES中提出，或者[B站私信我](https://space.bilibili.com/94829489)(本人常住B站↖(^ω^)↗)
+Yiyin (壹印) is a desktop photo-framing and watermark composition tool. This repository is maintained at [Gaotity/yiyin](https://github.com/Gaotity/yiyin).
 
-## 注意⚠️
+## Security model
 
-由于macOS系统更新，从`macOS 10.15`版本开始，系统会默认阻止未签名的第三方应用运行，所以如果你下载的是`macOS`版本，请在打开软件前，先在终端中运行以下命令来解除限制：
+The Electron renderer is sandboxed and has no Node.js access. Local files remain in the main process and are represented in the renderer by opaque resource identifiers and restricted `yiyin://` URLs. File ingestion validates signatures, size, batch count, and decoded image dimensions before processing.
 
-```bash
-sudo xattr -rd com.apple.quarantine /Applications/壹印.app
+The application performs image processing locally with Sharp and reads metadata in-process with ExifReader. It does not bundle or execute ExifTool or FFmpeg binaries, and it does not contain an automatic update or release-publishing path.
+
+See [the security policy](SECURITY.md) for private vulnerability reporting and [the hardening plan](docs/security-hardening-plan.md) for the enforced boundaries and residual risks.
+
+## Development
+
+Requirements:
+
+- Node.js 24
+- pnpm 11.13.0 through Corepack
+
+Install and validate:
+
+```sh
+corepack pnpm install --frozen-lockfile
+corepack pnpm run ci
 ```
 
-不解除限制会提示软件已损坏，无法打开
+Run the desktop application in development:
 
-## 使用
+```sh
+corepack pnpm dev
+```
 
-直接安装并打开软件
+Additional commands are documented in [CONTRIBUTING.md](CONTRIBUTING.md).
 
-<img src="static/软件界面.jpg" height="300" />
+## Packaging quarantine
 
-从 `v1.3` 版本之后所有的参数说明将在软件的参数设置中提示，只要将鼠标移动到参数后面的❓即可看到参数的作用
+Local and CI package outputs are unsigned test artifacts only. Public distribution is intentionally blocked until application branding and asset provenance are approved, Apple and Windows signing are configured, notarization is available, and a separately reviewed release workflow is authorized.
 
-设置好选项后选择图片并点击生成印框即可输出图片
+The repository does not publish unsigned installers or create GitHub Releases from its packaging workflows.
 
-<img src="static/输出印框.jpg" height="300" />
+## License
 
-### 效果图
-
-**横图效果**
-
-<img src="static/最终效果.jpg" height="300" />
-
-**竖图输出**
-
-<img src="static/最终效果.png" height="300" />
-
-**竖图转横图输出**
-
-<img src="static/最终效果-竖转横.jpeg" height="300" />
-
-以上的效果只是我个人比较常用的一些效果，通过各个参数选项搭配可以做出更多不同的效果
-
-## 自定义字体
-
-点击顶部的 `字体选项按钮` (在恢复默认按钮左边)，点击可以看见一个默认设置的字体，这个字体是软件自带的。在列表上方有一个 `+` 按钮，点击可以上传自己的字体文件，文件只会存放在用户目录，不涉及联网。
-
-<img src="static/字体列表.jpg" height="300" />
-
-<img src="static/添加字体.jpg" height="300" />
-
-## 结尾
-
-> 如果软件有什么地方使用的不是很好
->
-> 可以在ISSUES中提出你宝贵的意见
->
-> 如果需要软件功能有不太好的地方也可以提建议
-
-## 可以请我喝杯奶茶吗
-
-(´･ω･`)(´･ω･`)(´･ω･`)(´･ω･`)
-
-<img src="https://user-images.githubusercontent.com/76425888/285598346-907d3716-5865-40b0-b923-bbb084caceda.JPG" height="300" />
-
-如果你对软件感兴趣或者有什么不懂的地方可以加入交流群探讨
-
-**QQ群:** 718615618
+Yiyin is licensed under `GPL-3.0-only`. See [LICENSE](LICENSE).

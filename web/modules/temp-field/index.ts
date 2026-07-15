@@ -1,13 +1,10 @@
-import type { IFieldInfoItem } from '@src/interface'
-import type { ITemp } from '@/common/const/def-temps'
+import type { ITemp } from '@common/const/def-temps'
+import type { FieldInfoItem, FieldValue } from '@common/models/config'
 import { ExifFormat } from '@common/modules/exif-format'
-
-import { loadImage } from '@web/util/util'
 
 interface GetFieldTempInfoOpt {
   bgHeight: number
-  fields: IFieldInfoItem[]
-  logoPath: string
+  fields: FieldInfoItem<FieldValue>[]
 }
 
 /**
@@ -15,7 +12,7 @@ interface GetFieldTempInfoOpt {
  * @param exifInfo - 读取到的相机信息
  */
 export async function getFieldTempInfo(exifInfo: Record<string, any>, opt: GetFieldTempInfoOpt) {
-  const tempFieldRecord: Record<string, IFieldInfoItem> = {}
+  const tempFieldRecord: Record<string, FieldInfoItem<FieldValue>> = {}
   const fileds = opt.fields
 
   for (const filed of fileds) {
@@ -28,7 +25,7 @@ export async function getFieldTempInfo(exifInfo: Record<string, any>, opt: GetFi
     }
   }
 
-  return fillTempFieldInfo(tempFieldRecord, opt.logoPath, exifInfo)
+  return fillTempFieldInfo(tempFieldRecord, exifInfo)
 }
 
 interface IGetTempsConfOpts {
@@ -37,7 +34,7 @@ interface IGetTempsConfOpts {
   defFont: string
 }
 
-export function getTextTempList(temps: ITemp[], opts?: IGetTempsConfOpts): ITemp[] {
+export function getTextTempList(temps: ITemp[], opts: IGetTempsConfOpts): ITemp[] {
   return temps.map(temp => ({
     ...temp,
     font: {
@@ -52,54 +49,37 @@ export function getTextTempList(temps: ITemp[], opts?: IGetTempsConfOpts): ITemp
 /**
  * 模版 Field 对象信息填充
  * @param tempFieldConf
- * @param logoPath
  * @param exifInfo - 规范化的相机信息对象
  */
-async function fillTempFieldInfo(
-  tempFieldConf: Record<string, IFieldInfoItem>,
-  logoPath: string,
+function fillTempFieldInfo(
+  tempFieldConf: Record<string, FieldInfoItem<FieldValue>>,
   exifInfo?: Record<string, any>,
 ) {
   const exif = new ExifFormat(exifInfo || {})
-  const tempFieldInfo: Record<string, IFieldInfoItem> = {}
+  const tempFieldInfo: Record<string, FieldInfoItem<FieldValue>> = {}
 
-  for (const field in tempFieldConf) {
-    const info = tempFieldConf[field]
-
-    if (!tempFieldInfo[field]) {
-      const _k = field as keyof typeof exif._
-      const _info: IFieldInfoItem = {
+  for (const [field, info] of Object.entries(tempFieldConf)) {
+    let output = tempFieldInfo[field]
+    if (!output) {
+      const formatter = (exif._ as unknown as Record<string, (() => FieldValue) | undefined>)[field]
+      const normalized: FieldInfoItem<FieldValue> = {
         ...info,
         type: 'text',
         bImg: '',
         wImg: '',
-        value: exif._[_k]?.() || '',
+        value: formatter?.call(exif._) || '',
       }
-      tempFieldInfo[field] = JSON.parse(JSON.stringify(_info))
-
-      if (field === 'Make' && exif.oriExif.Make) {
-        const wImg = `file://${logoPath}/${exif.oriExif.Make.toLowerCase()}-w.svg`
-        const bImg = `file://${logoPath}/${exif.oriExif.Make.toLowerCase()}-b.svg`
-
-        if (await loadImage(wImg).catch(() => false)) {
-          tempFieldInfo[field].wImg = wImg
-          tempFieldInfo[field].type = 'img'
-        }
-
-        if (await loadImage(bImg).catch(() => false)) {
-          tempFieldInfo[field].bImg = bImg
-          tempFieldInfo[field].type = 'img'
-        }
-      }
+      output = structuredClone(normalized)
+      tempFieldInfo[field] = output
     }
 
     // 强制使用则看该配置是否启动 || 非强制使用则看是否有原始相机信息
-    if (info.use && (info.forceUse || !tempFieldInfo[field].value)) {
-      tempFieldInfo[field].type = info.type || 'text'
-      tempFieldInfo[field].value = `${info.value || ''}`
-      tempFieldInfo[field].bImg = `${info.bImg || ''}`
-      tempFieldInfo[field].wImg = `${info.wImg || ''}`
-      tempFieldInfo[field].font = info.font || tempFieldInfo[field].font
+    if (info.use && (info.forceUse || !output.value)) {
+      output.type = info.type || 'text'
+      output.value = `${info.value || ''}`
+      output.bImg = `${info.bImg || ''}`
+      output.wImg = `${info.wImg || ''}`
+      output.font = info.font || output.font
     }
   }
 

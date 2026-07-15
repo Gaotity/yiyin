@@ -9,7 +9,7 @@ interface IExifBaseClass {
 export class ExifFormat {
   private exif: any
 
-  private exifIns: ExifBase
+  private exifIns!: ExifBase
 
   private exifClassRecord: Record<string, IExifBaseClass> = {
     NIKON: NikonExif,

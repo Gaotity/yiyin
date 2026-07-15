@@ -1,10 +1,10 @@
+import type { TextImageData } from '@common/platform/bridge'
 import type { ImageTool } from '@modules/image-tool'
-import type { IImgFileInfo } from '@web/modules/text-tool/interface'
 import { Queue } from '@modules/queue'
 
 export const genTextImgQueue = new Queue<{
   id: string
-  textImgList: IImgFileInfo[]
+  textImgList: TextImageData[]
 }>({ concurrency: 2 })
 
 export const genMainImgShadowQueue = new Queue<{

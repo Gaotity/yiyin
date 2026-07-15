@@ -1,24 +1,27 @@
-import type { Exif } from '@modules/exiftool/interface'
+import type { Exif } from '@modules/exif-reader/interface'
 import type { IConfig } from '@src/interface'
-import type { RGBA } from 'sharp'
 
 import type { ImageToolOption, Material, OutputFilePaths, SizeInfo } from './interface'
 import { Buffer } from 'node:buffer'
 import Event from 'node:events'
 import fs from 'node:fs'
 import { join } from 'node:path'
-import ffmpegPath from '@ffmpeg-installer/ffmpeg'
-import { ExifTool } from '@modules/exiftool'
+import { ExifReaderService } from '@modules/exif-reader'
 import { Logger } from '@modules/logger'
-import routerConfig from '@root/router-config'
+import { createBlurredBackground } from '@root/image/blur'
+import { ipcChannels } from '@root/ipc/channels'
+import { resourceRegistry } from '@root/resources'
 import { mainApp } from '@src/common/app'
 import { genMainImgShadowQueue, genTextImgQueue } from '@src/common/queue'
 import { config } from '@src/config'
-import paths from '@src/path'
 import { getFileName, md5, tryCatch, usePromise } from '@utils'
-import fluentFfmpeg from 'fluent-ffmpeg'
 
 import sharp from 'sharp'
+
+type SharpInstance = ReturnType<typeof sharp>
+type SharpMetadata = Awaited<ReturnType<SharpInstance['metadata']>>
+type SharpOverlays = Parameters<SharpInstance['composite']>[0]
+type BackgroundColor = string | { r: number, g: number, b: number, alpha?: number }
 
 const log = new Logger('ImageTool')
 const NotInit = Symbol('未初始化')
@@ -28,7 +31,7 @@ interface EventMap {
 }
 
 export class ImageTool extends Event {
-  private isInit: boolean
+  private isInit = false
 
   private isCancelled = false
 
@@ -42,23 +45,21 @@ export class ImageTool extends Event {
 
   private outputFileNames: OutputFilePaths
 
-  private meta: sharp.Metadata
+  private meta!: SharpMetadata
 
-  private sizeInfo: SizeInfo
+  private sizeInfo!: SizeInfo
 
-  private blur = 200
-
-  private exif: Exif
+  private exif: Exif | null = null
 
   private _progress = 0
 
   private material: Material = {
-    bg: undefined,
+    bg: { path: '', w: 0, h: 0, top: 0, left: 0 },
     main: [],
     text: [],
   }
 
-  private contentH: number
+  private contentH = 0
 
   // eslint-disable-next-line accessor-pairs
   set progress(n: number) {
@@ -66,13 +67,13 @@ export class ImageTool extends Event {
     this.emit('progress', this.id, this._progress)
   }
 
-  constructor(path: string, name: string, opt: ImageToolOption) {
+  constructor(path: string, name: string, opt: ImageToolOption, taskId?: string) {
     super()
 
     this.path = path
     this.name = name
     this.outputOpt = opt.outputOption
-    this.id = md5(`${md5(path)}${Math.random()}${Date.now()}`)
+    this.id = taskId ?? md5(`${md5(path)}${Math.random()}${Date.now()}`)
 
     const baseFilePath = join(opt.cachePath, this.id)
     this.outputFileNames = {
@@ -131,8 +132,8 @@ export class ImageTool extends Event {
     this.sizeInfo.resetH = height
 
     // 获取相机信息
-    const exiftool = new ExifTool(this.path)
-    this.exif = exiftool.parse()
+    const exifReader = new ExifReaderService(this.path)
+    this.exif = exifReader.parse()
   }
 
   async genWatermark() {
@@ -206,8 +207,10 @@ export class ImageTool extends Event {
       await this.genBlurImg(w, h, toFilePath)
     }
 
-    this.material.main[0].left = Math.round((this.material.bg.w - this.material.main[0].w) / 2)
-    this.material.main[0].top += Math.round((this.material.bg.h - this.contentH) / 2)
+    const mainImage = this.material.main[0]
+    if (!mainImage) throw new Error('Main image material is missing')
+    mainImage.left = Math.round((this.material.bg.w - mainImage.w) / 2)
+    mainImage.top += Math.round((this.material.bg.h - this.contentH) / 2)
   }
 
   async genMainImg() {
@@ -243,9 +246,9 @@ export class ImageTool extends Event {
         }
         this.material.text = textImgList.map(i => ({
           path: '',
-          buf: Buffer.from(i.data.split(',')[1], 'base64'),
-          w: i.w,
-          h: i.h,
+          buf: Buffer.from(i.data.split(',')[1] ?? '', 'base64'),
+          w: i.w ?? 0,
+          h: i.h ?? 0,
           top: 0,
           left: 0,
         }))
@@ -253,7 +256,7 @@ export class ImageTool extends Event {
         if (import.meta.env.DEV) {
           tryCatch(() => {
             for (const { buf } of this.material.text) {
-              fs.writeFileSync(join(`${this.outputFileNames.base}_${Date.now() + Math.random()}.png`), buf)
+              if (buf) fs.writeFileSync(join(`${this.outputFileNames.base}_${Date.now() + Math.random()}.png`), buf)
             }
           }, null, e => log.error('文字图片写入异常', e))
         }
@@ -272,21 +275,26 @@ export class ImageTool extends Event {
 
     genTextImgQueue.on(handler)
 
-    mainApp.win.webContents.send(routerConfig.on.genTextImg, {
-      id: this.id,
+    const fields = await Promise.all([...config.tempFields, ...config.customTempFields].map(async field => ({
+      ...field,
+      bImg: await this.toResourceUrl(field.bImg),
+      wImg: await this.toResourceUrl(field.wImg),
+    })))
+
+    mainApp.win.webContents.send(ipcChannels.events.textRender, {
+      taskId: this.id,
       exif: this.exif || {},
       bgHeight: this.material.bg.h,
       options: config.options,
-      fields: [...config.tempFields, ...config.customTempFields],
+      fields,
       temps: config.temps,
-      logoPath: paths.logo,
     })
 
     return p
   }
 
   async composite(isPreview = false) {
-    const composite: sharp.OverlayOptions[] = []
+    const composite: SharpOverlays = []
 
     // 主图
     for (const img of this.material.main) {
@@ -298,10 +306,11 @@ export class ImageTool extends Event {
 
     // 文字
     if (this.material.text?.length) {
-      const textCompositeList: sharp.OverlayOptions[] = []
+      const textCompositeList: SharpOverlays = []
       for (let i = this.material.text.length - 1; i >= 0; i--) {
         const text = this.material.text[i]
-        const _composite: sharp.OverlayOptions = {
+        if (!text?.buf) continue
+        const _composite: SharpOverlays[number] = {
           input: text.buf,
           left: Math.round((this.material.bg.w - text.w) / 2),
         }
@@ -310,7 +319,7 @@ export class ImageTool extends Event {
           _composite.top = Math.round(this.material.bg.h - text.h)
         }
         else {
-          _composite.top = Math.round(textCompositeList[textCompositeList.length - 1].top - text.h)
+          _composite.top = Math.round((textCompositeList.at(-1)?.top ?? 0) - text.h)
         }
 
         textCompositeList.push(_composite)
@@ -346,49 +355,12 @@ export class ImageTool extends Event {
     return true
   }
 
-  private getFFmpeg() {
-    const _path = ffmpegPath.path.includes('app.asar') ? ffmpegPath.path.replace('app.asar', 'app.asar.unpacked') : ffmpegPath.path
-    fluentFfmpeg.setFfmpegPath(_path)
-    return fluentFfmpeg()
-  }
-
   private async genBlurImg(width: number, height: number, toFilePath: string) {
-    const ffmpeg = this.getFFmpeg()
-
-    // 统一转成固定大小，方便控制模糊数值
-    await sharp(this.path)
-      .rotate()
-      .resize({ width: 3025, height: 3025, fit: 'fill' })
-      .toFormat('jpeg', { quality: 50 })
-      .toFile(toFilePath)
-
-    const [promise, r] = usePromise()
-
-    /**
-     * luma_radius (lr)：控制在亮度（Luma）通道上的模糊半径。它决定了在视频的亮度通道上应用模糊的程度。较大的值将导致更大的模糊效果。默认值为 2。
-     * chroma_radius (cr)：控制在色度（Chroma）通道上的模糊半径。它决定了在视频的色度通道上应用模糊的程度。较大的值将导致更大的模糊效果。默认值为 2。
-     * luma_power (lp)：控制在亮度通道上应用模糊的程度。较大的值将导致更多的模糊效果。默认值为 1。chroma_radius (cr)：控制在色度（Chroma）通道上的模糊半径。它决定了在视频的色度通道上应用模糊的程度。较大的值将导致更大的模糊效果。默认值为 2。
-     * chroma_power (cp)：控制在色度通道上应用模糊的程度。较大的值将导致更多的模糊效果。默认值为 1。
-     */
-    // 模糊
-    ffmpeg.input(toFilePath)
-      .outputOptions('-vf', `boxblur=${Math.ceil(this.blur * ((this.outputOpt.bg_blur || 100) / 100))}:2`)
-      .saveToFile(toFilePath)
-      .on('end', () => r(true))
-      .on('error', (e) => {
-        log.error('FFmpeg模糊异常', e)
-        r(false)
-      })
-
-    if (!await promise) return
-
-    const buf = await sharp(toFilePath)
-      .resize({ width, height, fit: 'fill' })
-      .toBuffer()
+    const buf = await createBlurredBackground(this.path, width, height, this.outputOpt.bg_blur)
     fs.writeFileSync(toFilePath, buf)
   }
 
-  private async genSolidImg(width: number, height: number, toFilePath: string, color?: string | RGBA) {
+  private async genSolidImg(width: number, height: number, toFilePath: string, color?: BackgroundColor) {
     return sharp({
       create: {
         channels: 3,
@@ -431,7 +403,7 @@ export class ImageTool extends Event {
           r(false)
           return
         }
-        fs.writeFileSync(this.outputFileNames.mask, Buffer.from(data.split(',')[1], 'base64'))
+        fs.writeFileSync(this.outputFileNames.mask, Buffer.from(data.split(',')[1] ?? '', 'base64'))
 
         if (rate !== 1) {
           await sharp(this.outputFileNames.mask)
@@ -455,14 +427,29 @@ export class ImageTool extends Event {
     }, 20e3)
 
     genMainImgShadowQueue.on(handler)
-    mainApp.win.webContents.send(routerConfig.on.genMainImgShadow, {
-      id: this.id,
-      material: this.material,
+    const bg = await resourceRegistry.registerManaged(this.material.bg.path, 'background.jpg', 'image')
+    const main = await Promise.all(this.material.main.map(async item => ({
+      ...item,
+      resourceUrl: (await resourceRegistry.registerManaged(item.path, 'image.jpg', 'image')).resourceUrl,
+    })))
+    mainApp.win.webContents.send(ipcChannels.events.shadowRender, {
+      taskId: this.id,
+      material: {
+        bg: { ...this.material.bg, resourceUrl: bg.resourceUrl },
+        main,
+      },
       options: config.options,
       rate,
     })
 
     return p
+  }
+
+  private async toResourceUrl(filePath: string) {
+    if (!filePath) return ''
+    if (filePath.startsWith('yiyin://resource/')) return filePath
+    if (!fs.existsSync(filePath)) return ''
+    return (await resourceRegistry.registerManaged(filePath, filePath, 'image')).resourceUrl
   }
 
   /**
@@ -516,7 +503,9 @@ export class ImageTool extends Event {
 
     // 阴影宽度
     if (opt.shadow_show) {
-      const shadowHeight = Math.ceil(this.material.main[0].h * ((opt.shadow || 0) / 100))
+      const mainImage = this.material.main[0]
+      if (!mainImage) throw new Error('Main image material is missing')
+      const shadowHeight = Math.ceil(mainImage.h * ((opt.shadow || 0) / 100))
       contentTop = Math.max(contentTop, Math.ceil(shadowHeight))
       mainImgOffset = contentTop * 2
     }
@@ -534,24 +523,27 @@ export class ImageTool extends Event {
     }, 0)
 
     // 生成背景图片
-    const contentH = Math.ceil(textH + this.material.main[0].h + mainImgOffset)
+    const mainImage = this.material.main[0]
+    if (!mainImage) throw new Error('Main image material is missing')
+    const contentH = Math.ceil(textH + mainImage.h + mainImgOffset)
 
-    this.material.main[0].top = contentTop
+    mainImage.top = contentTop
     this.contentH = contentH
 
     if (this.material.text?.length) {
-      this.material.text[this.material.text.length - 1].h += textButtomOffset
+      const lastText = this.material.text.at(-1)
+      if (lastText) lastText.h += textButtomOffset
     }
   }
 
-  emit<U extends keyof EventMap>(
+  override emit<U extends keyof EventMap>(
     event: U,
     ...args: Parameters<EventMap[U]>
   ): boolean {
     return super.emit(event, ...args)
   }
 
-  off<U extends keyof EventMap>(
+  override off<U extends keyof EventMap>(
     eventName: U,
     listener: EventMap[U],
   ): this {
@@ -559,7 +551,7 @@ export class ImageTool extends Event {
     return this
   }
 
-  on<U extends keyof EventMap>(
+  override on<U extends keyof EventMap>(
     event: U,
     listener: EventMap[U],
   ): this {
@@ -567,7 +559,7 @@ export class ImageTool extends Event {
     return this
   }
 
-  once<U extends keyof EventMap>(
+  override once<U extends keyof EventMap>(
     event: U,
     listener: EventMap[U],
   ): this {

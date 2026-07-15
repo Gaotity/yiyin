@@ -2,10 +2,7 @@
   import type { IFieldInfoItem } from '@web/main/interface'
   import { ActionItem, FontSetting } from '@components'
   import { Dialog, Input, Message, Popover, Switch } from '@ggchivalrous/db-ui'
-  import { config } from '@web/store/config'
   import { createEventDispatcher } from 'svelte'
-
-  import StaticDialog from '../static-dialog/index.svelte'
   import './index.scss'
 
   export let title = ''
@@ -51,28 +48,6 @@
   }
 
   async function onDialogSave() {
-    if (form.type === 'img') {
-      if (!form.bImg || form.bImg.indexOf($config.staticDir) !== 0) {
-        const res = await window.api.uploadExifImg({ name: `${field}_bImg`, path: form.bImg })
-        if (res.code !== 0) {
-          Message.error(`图片保存失败！${res.message}`)
-          return
-        }
-
-        form.bImg = res.data
-      }
-
-      if (!form.wImg || form.wImg.indexOf($config.staticDir) !== 0) {
-        const res = await window.api.uploadExifImg({ name: `${field}_wImg`, path: form.wImg })
-        if (res.code !== 0) {
-          Message.error(`图片保存失败！${res.message}`)
-          return
-        }
-
-        form.wImg = res.data
-      }
-    }
-
     visible = false
     dispatch('update', form)
   }
@@ -80,26 +55,18 @@
   function onFileChange(t: string) {
     return async (e: Event & { currentTarget: EventTarget & HTMLInputElement }) => {
       if (e.currentTarget?.files?.length) {
+        const result = await window.platform.files.registerOverlay(e.currentTarget.files[0], `${field}-${t}`)
+        if (!result.ok) {
+          Message.error(`图片保存失败：${result.error.message}`)
+          return
+        }
         if (t === 'white') {
-          form.wImg = e.currentTarget.files[0].path
+          form.wImg = result.data.resourceUrl
         }
         else {
-          form.bImg = e.currentTarget.files[0].path
+          form.bImg = result.data.resourceUrl
         }
       }
-    }
-  }
-
-  function onStaticChange(t: string, path: string) {
-    if (!path) {
-      return
-    }
-
-    if (t === 'white') {
-      form.wImg = path
-    }
-    else {
-      form.bImg = path
     }
   }
 </script>
@@ -153,15 +120,14 @@
               <svelte:fragment slot='popup'>模糊背景下使用的图片<br>一般使用白色字体的图片</svelte:fragment>
               <svelte:fragment slot='expand'>
                 <label for='wImg' style='margin: 0 8px;'><i class='db-icon-upload' /></label>
-                <StaticDialog on:change={e => onStaticChange('white', e.detail)} />
               </svelte:fragment>
               <input id='wImg' class='normal-input' style='display: none;' type='file' on:change={onFileChange('white')} />
             </ActionItem>
 
             {#if form.wImg}
               <Popover trigger='hover'>
-                <img slot='reference' class='form-item-img' src='file://{form.wImg}?flag={Date.now()}' alt="">
-                <img style='width: 200px; height: auto;' class='form-item-img' src='file://{form.wImg}?flag={Date.now()}' alt="">
+                <img slot='reference' class='form-item-img' src={form.wImg} alt="">
+                <img style='width: 200px; height: auto;' class='form-item-img' src={form.wImg} alt="">
               </Popover>
             {/if}
           </div>
@@ -171,15 +137,14 @@
               <svelte:fragment slot='popup'>纯色背景下使用的图片<br>一般使用黑色字体的图片</svelte:fragment>
               <svelte:fragment slot='expand'>
                 <label for='bImg' style='margin: 0 8px;'><i class='db-icon-upload' /></label>
-                <StaticDialog on:change={e => onStaticChange('black', e.detail)} />
               </svelte:fragment>
               <input id='bImg' class='normal-input' style='display: none;' type='file' on:change={onFileChange('black')} />
             </ActionItem>
 
             {#if form.bImg}
               <Popover trigger='hover'>
-                <img slot='reference' class='form-item-img' src='file://{form.bImg}?flag={Date.now()}' alt="">
-                <img style='width: 200px; height: auto;' class='form-item-img' src='file://{form.bImg}?flag={Date.now()}' alt="">
+                <img slot='reference' class='form-item-img' src={form.bImg} alt="">
+                <img style='width: 200px; height: auto;' class='form-item-img' src={form.bImg} alt="">
               </Popover>
             {/if}
           </div>

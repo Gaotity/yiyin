@@ -1,171 +1,90 @@
 <script lang='ts'>
-  import type { ImageToolOption } from '@web/modules/image-tool/interface'
-  import type { TextToolOption } from '@web/modules/text-tool/interface'
+  import type { ShadowRenderRequest, TextRenderRequest } from '@common/platform/bridge'
   import type { IFontInfo } from '@web/util/util'
   import type { IFileInfo, TInputEvent } from './interface'
   import { Message } from '@ggchivalrous/db-ui'
   import { ImageTool } from '@web/modules/image-tool'
   import { TextTool } from '@web/modules/text-tool'
-  import { config, pathInfo } from '@web/store/config'
+  import { config } from '@web/store/config'
   import { importFont } from '@web/util/util'
-
   import { Actions, Footer, Header, ParamSetting, TempSetting } from './components'
   import './index.scss'
 
   let fileInfoList: IFileInfo[] = []
-  const processing = false
-  let fileSelectDom: HTMLInputElement = null
+  let fileSelectDom: HTMLInputElement | null = null
   let showParamSetting = false
   let showTempSetting = false
   let fontList: IFontInfo[] = []
 
-  $: onFileInfoListChange(fileInfoList)
-  $: onFontMap($config.fontMap)
   $: importFont(fontList)
+  $: fontList = $config.fonts.map(font => ({ name: font.name, path: font.resourceUrl }))
 
-  onFileDrop()
-
-  window.api['on:genTextImg'](async (data: TextToolOption & { id: string }) => {
+  const unsubscribeText = window.platform.events.onTextRender(async (data: TextRenderRequest) => {
     const textTool = new TextTool(data.exif, data)
-    const textImgList = await textTool.genTextImg().catch((e) => {
-      console.log(e)
+    const images = await textTool.genTextImg().catch((error) => {
+      console.error('Text render failed', error)
+      return []
     })
-
-    window.api.genTextImg({
-      id: data.id,
-      textImgList,
-    })
+    await window.platform.tasks.completeTextRender(data.taskId, images)
   })
 
-  window.api['on:genMainImgShadow'](async (data: ImageToolOption & { id: string }) => {
+  const unsubscribeShadow = window.platform.events.onShadowRender(async (data: ShadowRenderRequest) => {
     const tool = new ImageTool(data)
-    const _data = await tool.genMainImgShadow()
-    window.api.genMainImgShadow({
-      id: data.id,
-      data: _data,
-    })
+    const image = await tool.genMainImgShadow()
+    await window.platform.tasks.completeShadowRender(data.taskId, image)
   })
 
-  async function onFileChange(ev: TInputEvent) {
-    if (ev.currentTarget && ev.currentTarget.type === 'file') {
-      const files = ev.currentTarget.files
-      const _fileUrlList: IFileInfo[] = []
+  window.addEventListener('beforeunload', () => {
+    unsubscribeText()
+    unsubscribeShadow()
+  }, { once: true })
 
-      for (let i = 0; i < files.length; i++) {
-        _fileUrlList.push({
-          path: files[i].path,
-          name: files[i].name,
-        })
-      }
+  async function registerFiles(files: File[]) {
+    const imageFiles = files.filter((file) => {
+      if (file.type.startsWith('image/')) return true
+      Message.error(`${file.name} 文件非图片文件`)
+      return false
+    })
+    if (!imageFiles.length) return
 
-      const res = await window.api.addTask(_fileUrlList)
-      if (res.code !== 0) {
-        Message.error(`图片添加失败${res.message}`)
-        return
-      }
-
-      fileInfoList.unshift(...res.data.reverse())
-      fileSelectDom.value = ''
-      fileInfoList = fileInfoList
+    const result = await window.platform.files.registerImages(imageFiles)
+    if (!result.ok) {
+      Message.error(`图片添加失败：${result.error.message}`)
+      return
     }
+
+    fileInfoList = [...result.data.reverse(), ...fileInfoList]
+    if ($config.options.iot) await startTask()
+  }
+
+  async function onFileChange(event: TInputEvent) {
+    await registerFiles(Array.from(event.currentTarget.files ?? []))
+    if (fileSelectDom) fileSelectDom.value = ''
   }
 
   async function startTask() {
-    const res = await window.api.startTask()
-    if (res.code !== 0) {
-      Message.error(res.message || '水印生成开启失败')
-    }
+    const result = await window.platform.tasks.start()
+    if (!result.ok) Message.error(result.error.message || '水印生成开启失败')
   }
 
-  // 监听文件放入，然后执行水印生成等后续操作
-  function onFileDrop() {
-    window.addEventListener('drop', async (e) => {
-      e.preventDefault()
-      e.stopPropagation()
-
-      const _fileInfoList = []
-      const files = e.dataTransfer.files
-
-      for (let i = 0; i < files.length; i++) {
-        const file = files.item(i)
-        if (!file.type.startsWith('image/')) {
-          Message.error(`${file.name} 文件非图片文件`)
-          continue
-        }
-
-        _fileInfoList.push({
-          name: file.name,
-          path: file.path,
-        })
-      }
-
-      const res = await window.api.addTask(_fileInfoList)
-      if (res.code !== 0) {
-        Message.error(`图片添加失败${res.message}`)
-        return
-      }
-
-      fileInfoList.unshift(...res.data.reverse())
-      fileInfoList = fileInfoList
-
-      if ($config.options?.iot) {
-        startTask()
-      }
-    })
-
-    window.addEventListener('dragover', (e) => {
-      e.preventDefault()
-      e.stopPropagation()
-    })
-  }
-
-  function onFileInfoListChange(_: IFileInfo[]) {
-    if ($config.options?.iot) {
-      startTask()
-    }
-  }
-
-  async function onFontMap(fontMap: Record<string, string>) {
-    if (fontMap) {
-      const list = []
-      for (const key in fontMap) {
-        const data = await window.api.pathJoin([$config.fontDir, fontMap[key]])
-        if (data.code === 0) {
-          list.push({
-            name: key,
-            path: `file://${data.data.replaceAll('\\', '\\\\')}`,
-          })
-        }
-      }
-
-      fontList = list
-    }
-  }
-
-  async function getGuideIconPath(arr: string[]) {
-    const data = await window.api.pathJoin(arr)
-    if (data.code === 0) {
-      return data.data.replaceAll('\\', '\\\\')
-    }
-    return ''
-  }
+  window.addEventListener('drop', (event) => {
+    event.preventDefault()
+    event.stopPropagation()
+    void registerFiles(Array.from(event.dataTransfer?.files ?? []))
+  })
+  window.addEventListener('dragover', (event) => {
+    event.preventDefault()
+    event.stopPropagation()
+  })
 </script>
 
 <Header />
 
 <div id='root'>
-  {#await getGuideIconPath([$pathInfo.public, '/img/guide.svg']) then path}
-    <div class='guide'>
-      <i style="background-image: url('file://{path}');"></i>
-      白嫖指南(●°u°●)​ 」
-    </div>
-    <div class='desc'>
-      <i style="background-image: url('file://{path}');"></i>
-      萌新指北(｡･ω･｡)
-    </div>
-  {/await}
+  <div class='guide'>壹印 · 本地照片水印工具</div>
+  <div class='desc'>图片处理仅在本机完成</div>
 
-  <input type='file' id='path' accept='image/*' bind:this={fileSelectDom} on:change={onFileChange} multiple class='hide' />
+  <input type='file' id='path' accept='image/jpeg,image/png,image/webp' bind:this={fileSelectDom} on:change={onFileChange} multiple class='hide' />
 
   <div class='body'>
     <div class='content'>
@@ -174,13 +93,7 @@
 
     <div class='button-wrap'>
       <label for='path' class='button grass'>添加图片</label>
-      <div class='button grass' on:click={startTask} on:keypress role='button' tabindex='-1'>
-        {#if processing}
-          处理中...
-        {:else}
-          生成印框
-        {/if}
-      </div>
+      <div class='button grass' on:click={startTask} on:keypress role='button' tabindex='-1'>生成印框</div>
       <div class='button grass' on:click={() => { showParamSetting = true }} on:keypress role='button' tabindex='-1'>参数设置</div>
       <div class='button grass' on:click={() => { showTempSetting = true }} on:keypress role='button' tabindex='-1'>模板设置</div>
     </div>

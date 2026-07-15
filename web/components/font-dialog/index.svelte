@@ -1,98 +1,43 @@
-<script>
+<script lang='ts'>
   import { Dialog, Form, FormItem, Input, Message } from '@ggchivalrous/db-ui'
   import { createEventDispatcher } from 'svelte'
   import './index.scss'
 
   export let visible = false
-
   const dispatch = createEventDispatcher()
-  const fontForm = {
-    name: '',
-    path: '',
-    isAutoName: false,
-  }
+  let name = ''
+  let file: File | null = null
 
-  function close() {
-    visible = false
-  }
-
-  async function onFormSubmit() {
-    const name = fontForm.name.trim()
-    if (!name || !fontForm.path) {
+  async function submit() {
+    if (!name.trim() || !file) {
       Message.info('请填写完整')
       return
     }
-
-    const res = await window.api.addFont(fontForm)
-
-    if (res.code === 0) {
-      switch (res.data) {
-        case 1:
-          Message.error('名称重复')
-          return
-        case 2:
-          Message.error('字体文件不存在')
-          return
-        default:
-          Message.success('添加成功')
-          break
-      }
+    const result = await window.platform.files.registerFont(file, name.trim())
+    if (!result.ok) {
+      Message.error(result.error.message)
+      return
     }
+    Message.success('添加成功')
     dispatch('update')
-    close()
+    visible = false
+    name = ''
+    file = null
   }
 
-  function onFileChange(ev) {
-    if (ev.target && ev.target.type === 'file') {
-      const files = ev.target.files
-      fontForm.path = files[0].path
-      if (!fontForm.name || fontForm.isAutoName) {
-        fontForm.isAutoName = true
-        const arr = files[0].name.split('.')
-
-        if (arr.length > 1) {
-          arr.pop()
-        }
-
-        fontForm.name = formatFontName(arr.join('.'))
-      }
-    }
-  }
-
-  function onNameChange() {
-    if (fontForm.name) {
-      fontForm.isAutoName = false
-    }
-  }
-
-  function onNameInput(v) {
-    fontForm.name = formatFontName(v.detail)
-  }
-
-  function formatFontName(v) {
-    const match = v.match(/([\u4E00-\u9FA5a-z_]+)/i)
-    return match ? match[0] : ''
+  function chooseFile(event: Event & { currentTarget: HTMLInputElement }) {
+    file = event.currentTarget.files?.[0] ?? null
+    if (!name && file) name = file.name.replace(/\.[^.]+$/, '').replace(/[^\u4E00-\u9FA5\w-]/g, '')
   }
 </script>
 
 <Dialog bind:visible width='400px' class='font-dialog'>
   <Form>
-    <FormItem label='字体名称'>
-      <Input
-        type='text'
-        value={fontForm.name}
-        placeholder='Enter name...'
-        on:change={onNameChange}
-        on:input={onNameInput}
-      />
-    </FormItem>
-    <FormItem label='字体文件'>
-      <input class='font-input-file grass' type='file' on:change={onFileChange} />
-    </FormItem>
+    <FormItem label='字体名称'><Input type='text' bind:value={name} placeholder='Enter name...' /></FormItem>
+    <FormItem label='字体文件'><input class='font-input-file grass' type='file' accept='.ttf,.otf' on:change={chooseFile} /></FormItem>
   </Form>
-
   <footer class='modal-footer'>
-    <div class='grass button' on:click={close} on:keypress role='button' tabindex='-1'>取消</div>
-    <div class='grass button' on:click={onFormSubmit} on:keypress role='button' tabindex='-1'>添加</div>
+    <div class='grass button' on:click={() => { visible = false }} on:keypress role='button' tabindex='-1'>取消</div>
+    <div class='grass button' on:click={submit} on:keypress role='button' tabindex='-1'>添加</div>
   </footer>
 </Dialog>

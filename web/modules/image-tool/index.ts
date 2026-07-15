@@ -17,10 +17,13 @@ export class ImageTool {
 
   async genMainImgShadow() {
     const { opt } = this
-    const bgImg = await loadImage(this.material.bg.path)
-    const mainImg = await loadImage(this.material.main[0].path)
+    const mainMaterial = this.material.main[0]
+    if (!mainMaterial) throw new Error('Main image material is missing')
+    const bgImg = await loadImage(this.material.bg.resourceUrl)
+    const mainImg = await loadImage(mainMaterial.resourceUrl)
     const canvas = createCanvas(Math.floor(bgImg.width * this.rate), Math.floor(bgImg.height * this.rate))
     const ctx = canvas.getContext('2d')
+    if (!ctx) throw new Error('Canvas 2D context is unavailable')
 
     ctx.drawImage(bgImg, 0, 0, canvas.width, canvas.height)
 
@@ -46,7 +49,7 @@ export class ImageTool {
     }
 
     const contentOffsetX = Math.ceil((canvas.width - mainImg.width * this.rate) / 2) + 1
-    const contentOffsetY = Math.floor(this.material.main[0].top * this.rate)
+    const contentOffsetY = Math.floor(mainMaterial.top * this.rate)
     const blur = opt.shadow_show ? Math.ceil(mainImg.height * this.rate) * ((opt.shadow || 6) / 100) : 0
 
     if (blur) {
@@ -100,7 +103,7 @@ export class ImageTool {
 
     // 简单的亮度计算方法
     for (let i = 0; i < data.length; i += 4) {
-      const brightness = (data[i] + data[i + 1] + data[i + 2]) / 3
+      const brightness = ((data[i] ?? 0) + (data[i + 1] ?? 0) + (data[i + 2] ?? 0)) / 3
       totalBrightness += brightness
     }
 

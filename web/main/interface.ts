@@ -1,29 +1,17 @@
-import type { Exif } from '@modules/exiftool/interface'
-import type { IConfig as Config } from '@src/interface'
+import type { FieldInfoItem, PublicConfig } from '@common/models/config'
+import type { ExifData } from '@common/models/exif'
+import type { TaskDescriptor } from '@common/platform/resources'
 
-export * from '@src/interface'
-
-export interface IFileInfo {
-  id?: string
-  path: string
-  name: string
-}
-
-export interface IConfig extends Pick<
-  Config,
-  'options' | 'tempFields' | 'customTempFields' | 'staticDir' | 'temps'
-> {
-  output: string
-  fontMap: Record<string, string>
-  fontDir: string
-}
+export type IFileInfo = TaskDescriptor
+export type IConfig = PublicConfig
+export type IFieldInfoItem<T = string> = FieldInfoItem<T>
 
 export type TInputEvent = Event & {
   currentTarget: EventTarget & HTMLInputElement
 }
 
-export interface ImgInfo extends IFileInfo {
-  exif: Exif
+export interface ImgInfo extends TaskDescriptor {
+  exif: ExifData | null | undefined
   faild: boolean
   faildMsg: string
   progress: number

@@ -1,36 +1,27 @@
-const isObj = (obj: any) => Object.prototype.toString.call(obj) === '[object Object]'
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Object.prototype.toString.call(value) === '[object Object]'
+}
 
-export function normalize<T = object>(origin: any, model: T): T {
-  const newObj: any = {}
-  origin = JSON.parse(JSON.stringify(origin || {}))
+export function normalize<T extends object>(origin: unknown, model: T): T {
+  const source = isRecord(origin) ? structuredClone(origin) : {}
+  const result: Record<string, unknown> = {}
 
-  for (const k in model) {
-    if (Object.hasOwn(model, k)) {
-      if (isObj(model[k]) && Object.keys(model[k]).length) {
-        newObj[k] = normalize(origin[k], model[k])
-      }
-      else if (Array.isArray(model[k]) && isObj((model[k] as any)[0])) {
-        if (!Array.isArray(origin[k])) {
-          origin[k] = []
-        }
-
-        newObj[k] = []
-        for (const i of origin[k]) {
-          if (isObj(i)) {
-            newObj[k].push(normalize(i, (model[k] as any)[0]))
-          }
-        }
-      }
-      else if (origin[k] === undefined) {
-        newObj[k] = model[k]
-      }
-      else {
-        newObj[k] = origin[k]
-      }
+  for (const [key, modelValue] of Object.entries(model)) {
+    const sourceValue = source[key]
+    if (isRecord(modelValue) && Object.keys(modelValue).length > 0) {
+      result[key] = normalize(sourceValue, modelValue)
+    }
+    else if (Array.isArray(modelValue) && isRecord(modelValue[0])) {
+      result[key] = Array.isArray(sourceValue)
+        ? sourceValue.filter(isRecord).map(item => normalize(item, modelValue[0]))
+        : []
+    }
+    else {
+      result[key] = sourceValue === undefined ? modelValue : sourceValue
     }
   }
 
-  return newObj
+  return result as T
 }
 
-export const cpObj = (obj: any) => JSON.parse(JSON.stringify(obj))
+export const cpObj = <T>(obj: T): T => structuredClone(obj)

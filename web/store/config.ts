@@ -1,13 +1,13 @@
-import type { IConfig } from '../main/interface'
+import type { PublicConfig } from '@common/models/config'
 import { Message } from '@ggchivalrous/db-ui'
-import { DefaultConfig } from '@src/config'
-
 import { writable } from 'svelte/store'
 
-let initConfig = false
-let loadConfig = false
+let initialized = false
+let loading = false
 
-export const config = writable<IConfig>({
+const initialConfig: PublicConfig = {
+  schemaVersion: 1,
+  outputDisplayName: '',
   options: {
     main_img_w_rate: 90,
     text_margin: 0.4,
@@ -22,88 +22,49 @@ export const config = writable<IConfig>({
     shadow: 6,
     shadow_show: true,
     bg_rate_show: true,
-    font: '',
-    bg_rate: {
-      w: 0,
-      h: 0,
-    },
+    font: 'system-ui',
+    bg_rate: { w: 0, h: 0 },
     bg_blur: 100,
     solid_color: '#fff',
     preview_show: false,
   },
-  fontMap: {},
-  fontDir: '',
+  fonts: [],
   tempFields: [],
   customTempFields: [],
   temps: [],
-  output: '',
-  staticDir: '',
-})
-
-function onConfigUpdate(v: IConfig, newConf: any) {
-  v.options = newConf.options
-  v.output = newConf.output
-  v.fontMap = newConf.font.map
-  v.fontDir = newConf.font.dir
-  v.tempFields = newConf.tempFields
-  v.customTempFields = newConf.customTempFields
-  v.temps = newConf.temps
-  v.staticDir = newConf.staticDir
-  return v
 }
 
+export const config = writable<PublicConfig>(initialConfig)
+
 export async function getConfig() {
-  loadConfig = true
-  const defConf = await window.api.getConfig()
-  if (defConf.code === 0) {
-    config.update(v => onConfigUpdate(v, defConf.data))
-    console.log('配置信息:', defConf.data)
-    config.subscribe(v => console.log('使用配置信息:', v))()
-  }
-  loadConfig = false
+  loading = true
+  const result = await window.platform.config.get()
+  if (result.ok) config.set(result.data)
+  else Message.error(`配置加载失败：${result.error.message}`)
+  loading = false
 }
 
 export async function resetConfig() {
-  const res = await window.api.resetConfig()
-  if (res.code !== 0) {
-    Message.error(`重置失败！！${res.message}`)
+  const result = await window.platform.config.reset()
+  if (!result.ok) {
+    Message.error(`重置失败：${result.error.message}`)
     return
   }
-
-  config.update(v => onConfigUpdate(v, res.data))
+  config.set(result.data)
   Message.success({ message: '重置成功' })
 }
 
-export const pathInfo = writable({
-  public: '',
-  logo: '',
+config.subscribe(async (value) => {
+  if (!initialized || loading) return
+  const result = await window.platform.config.update({
+    options: value.options,
+    tempFields: value.tempFields,
+    customTempFields: value.customTempFields,
+    temps: value.temps,
+  })
+  if (!result.ok) Message.error(`配置持久化失败：${result.error.message}`)
 })
 
-config.subscribe(async (v) => {
-  if (initConfig && !loadConfig) {
-    console.log('持久化配置信息')
-
-    const _conf = await window.api.setConfig(v)
-    if (_conf.code !== 0) {
-      console.log('持久化配置信息失败:', _conf.message)
-      Message.error(`配置持久化失败!!${_conf.message}`)
-      return
-    }
-
-    console.log('配置信息:', _conf.data)
-    config.subscribe(_v => console.log('使用配置信息:', _v))()
-  }
+void getConfig().finally(() => {
+  initialized = true
 })
-
-getConfig().then(() => {
-  initConfig = true
-})
-
-async function getPathInfo() {
-  const info = await window.api.pathInfo()
-  if (info.code === 0) {
-    pathInfo.set(info.data)
-  }
-}
-
-getPathInfo()

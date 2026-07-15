@@ -1,0 +1,61 @@
+name: Manual Desktop Package
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: Private package artifact (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - macos-latest
+          - windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Install pnpm
+        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+      - name: Install Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Package macOS application
+        if: runner.os == 'macOS'
+        run: pnpm package:mac
+      - name: Verify macOS package boundary
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          app="$(find dist -maxdepth 2 -name '*.app' -print -quit)"
+          test -n "$app"
+          test -f "$app/Contents/Resources/app.asar"
+          pnpm verify:package "$app/Contents" "$app/Contents/MacOS/壹印"
+      - name: Package Windows application
+        if: runner.os == 'Windows'
+        run: pnpm package:win
+      - name: Verify Windows package boundary
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $executable = Get-ChildItem dist -Recurse -Filter '壹印.exe' | Select-Object -First 1
+          if (-not $executable) { throw 'Packaged executable was not found.' }
+          $asar = Join-Path $executable.DirectoryName 'resources/app.asar'
+          if (-not (Test-Path $asar)) { throw 'Packaged ASAR was not found.' }
+          pnpm verify:package $executable.DirectoryName $executable.FullName
+      - name: Upload private workflow artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: yiyin-${{ runner.os }}-${{ runner.arch }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7

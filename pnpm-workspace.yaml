@@ -1,0 +1,16 @@
+minimumReleaseAge: 1440
+minimumReleaseAgeExclude:
+  - electron@43.1.1
+packages:
+  - .
+
+blockExoticSubdeps: true
+allowBuilds:
+  '@electron/fuses': true
+  '@parcel/watcher': false
+  app-builder-bin: true
+  electron: true
+  electron-winstaller: false
+  esbuild: true
+  exifreader: false
+  sharp: true

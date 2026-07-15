@@ -1,0 +1,21 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "lib": ["ES2022"],
+    "paths": {
+      "@/*": ["./*"],
+      "@common/*": ["common/*"],
+      "@root/*": ["electron/*"],
+      "@src/*": ["electron/src/*"],
+      "@config": ["electron/src/config.ts"],
+      "@modules": ["electron/src/modules/index.ts"],
+      "@modules/*": ["electron/src/modules/*"],
+      "@utils": ["electron/src/utils/index.ts"],
+      "@utils/*": ["electron/src/utils/*"]
+    },
+    "types": ["node", "electron", "vite/client"]
+  },
+  "include": ["common/**/*.ts", "electron/**/*.ts", "vite.config.ts", "svelte.config.ts", "scripts/**/*.ts"],
+  "exclude": ["web", "node_modules", "dist", "dist-electron", "tests"]
+}

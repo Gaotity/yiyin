@@ -1,4 +1,4 @@
-import { arrToObj, tryAsyncCatch, usePromise } from '@/common/utils'
+import { arrToObj, usePromise } from '@/common/utils'
 
 export function toRoman(num: number) {
   const romanNumerals = [
@@ -19,10 +19,10 @@ export function toRoman(num: number) {
 
   let roman = ''
 
-  for (let i = 0; i < romanNumerals.length; i++) {
-    while (num >= romanNumerals[i].value) {
-      roman += romanNumerals[i].numeral
-      num -= romanNumerals[i].value
+  for (const item of romanNumerals) {
+    while (num >= item.value) {
+      roman += item.numeral
+      num -= item.value
     }
   }
 
@@ -32,8 +32,7 @@ export function toRoman(num: number) {
 export function charToNumberChar(originStr: string, mathematicalFontStart = 0x1D63C) {
   let str = ''
 
-  for (let i = 0; i < originStr.length; i++) {
-    const originalChar = originStr[i]
+  for (const originalChar of originStr) {
     const lowercaseOffset = originalChar.charCodeAt(0) - 'a'.charCodeAt(0) // 小写字母的偏移量
     const uppercaseOffset = originalChar.charCodeAt(0) - 'A'.charCodeAt(0) // 大写字母的偏移量
 
@@ -61,17 +60,7 @@ export async function loadImage(url: string) {
   img.onload = () => r(img)
   img.onerror = j
 
-  const d = await tryAsyncCatch(promise)
-  if (d) {
-    return d
-  }
-
-  img.src = `file://${url}`
-  const [promise1, r1, j1] = usePromise<HTMLImageElement>()
-  img.onload = () => r1(img)
-  img.onerror = j1
-
-  return promise1
+  return promise
 }
 
 // 计算图片整体亮度
@@ -82,7 +71,7 @@ export function calcAverageBrightness(ctx: CanvasRenderingContext2D, width: numb
 
   for (let i = 0; i < data.length; i += 4) {
   // 简单的亮度计算方法
-    const brightness = (data[i] + data[i + 1] + data[i + 2]) / 3
+    const brightness = ((data[i] ?? 0) + (data[i + 1] ?? 0) + (data[i + 2] ?? 0)) / 3
     totalBrightness += brightness
   }
   return totalBrightness / (width * height)

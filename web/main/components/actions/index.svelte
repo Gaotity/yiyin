@@ -14,12 +14,12 @@
   let selectedId = ''
   let previewUrl = ''
   let previewLoading = false
-  let previewTimer: NodeJS.Timeout
+  let previewTimer: ReturnType<typeof setTimeout>
 
   $: {
     if (fileInfoList.length) {
-      if (!selectedId || !fileInfoList.some(i => i.id === selectedId)) {
-        selectedId = fileInfoList[0].id
+      if (!selectedId || !fileInfoList.some(i => i.taskId === selectedId)) {
+        selectedId = fileInfoList[0].taskId
       }
     }
     else {
@@ -42,20 +42,20 @@
 
   async function updatePreview() {
     if (!$config.options.preview_show) return
-    const file = fileInfoList.find(i => i.id === selectedId)
+    const file = fileInfoList.find(i => i.taskId === selectedId)
     if (!file) return
 
     previewLoading = true
     try {
-      const res = await window.api.genPreview({ path: file.path, name: file.name })
-      if (res && res.code === 0) {
+      const res = await window.platform.tasks.preview(file.taskId)
+      if (res.ok) {
         // 如果在请求过程中预览被关闭了，就不更新了
         if ($config.options.preview_show) {
           previewUrl = res.data
         }
       }
-      else if (res) {
-        console.error('预览生成失败:', res.message)
+      else {
+        console.error('预览生成失败:', res.error.message)
         previewUrl = ''
       }
     }
@@ -77,34 +77,34 @@
   let outputDirName = ''
   let imgInfoRecord: Record<string, ImgInfo> = {}
 
-  $: getPathName($config.output)
+  $: outputDirName = $config.outputDisplayName || '未选择'
   $: onFileInfoList(fileInfoList)
   $: getHandleCount(imgInfoRecord)
 
-  window.api['on:progress']((data: Pick<ImgInfo, 'id' | 'progress'>) => {
-    if (imgInfoRecord[data.id]) {
-      if (imgInfoRecord[data.id].closeInterval) {
-        imgInfoRecord[data.id].closeInterval()
+  window.platform.events.onProgress((data) => {
+    if (imgInfoRecord[data.taskId]) {
+      if (imgInfoRecord[data.taskId].closeInterval) {
+        imgInfoRecord[data.taskId].closeInterval()
       }
 
-      imgInfoRecord[data.id].closeInterval = smoothIncrement(
-        imgInfoRecord[data.id].progress,
+      imgInfoRecord[data.taskId].closeInterval = smoothIncrement(
+        imgInfoRecord[data.taskId].progress,
         data.progress,
         10,
         (n) => {
-          imgInfoRecord[data.id].progress = n
+          imgInfoRecord[data.taskId].progress = n
         },
       )
     }
   })
 
-  window.api['on:faildTask']((data: { id: string, msg: string }) => {
-    if (!imgInfoRecord[data.id]) {
+  window.platform.events.onFailure((data) => {
+    if (!imgInfoRecord[data.taskId]) {
       return
     }
 
-    imgInfoRecord[data.id].faild = true
-    imgInfoRecord[data.id].faildMsg = data.msg
+    imgInfoRecord[data.taskId].faild = true
+    imgInfoRecord[data.taskId].faildMsg = data.message
   })
 
   function getHandleCount(_imgInfoRecord: typeof imgInfoRecord) {
@@ -112,46 +112,25 @@
   }
 
   function onFileInfoList(list: IFileInfo[]) {
-    imgInfoRecord = arrToObj(list, 'id', i => ({
+    imgInfoRecord = arrToObj(list, 'taskId', i => ({
       ...i,
       interval: null,
       progress: 0,
       exif: null,
       faild: false,
       faildMsg: '',
-      ...imgInfoRecord[i.id],
+      ...imgInfoRecord[i.taskId],
     }))
   }
 
   async function changeOutputPath() {
-    const data = await window.api['open:selectPath']()
-    if (data.code === 0 && data.data.output) {
-      $config.output = data.data.output
-    }
+    const result = await window.platform.config.chooseOutputDirectory()
+    if (result.ok && result.data) config.set(result.data)
   }
 
-  function openDir(dir: string) {
-    window.api['open:dir'](dir)
-  }
-
-  function getPathName(path: string) {
-    path = path.trim()
-
-    if (!path) {
-      outputDirName = '异常目录无法识别'
-      return
-    }
-
-    const isMatch = path.match(/^([A-Z]:)\\/i)
-
-    if (isMatch) {
-      const arr = path.replace(isMatch[1], '').split('\\')
-      outputDirName = arr[arr.length - 1] || isMatch[0]
-      return
-    }
-
-    const arr = path.split('/')
-    outputDirName = arr[arr.length - 1] || '/'
+  async function openDir() {
+    const result = await window.platform.config.openOutputDirectory()
+    if (!result.ok) Message.error(result.error.message)
   }
 
   function onBGRateChange(e: CustomEvent<boolean>) {
@@ -192,15 +171,15 @@
     })
   }
 
-  async function getExitInfo(id: string, path: string) {
+  async function getExitInfo(id: string) {
     if (imgInfoRecord[id].exif !== null) {
       return imgInfoRecord[id].exif
     }
 
-    const info = await window.api.getExitInfo(path)
-    imgInfoRecord[id].exif = info.data || undefined
+    const info = await window.platform.tasks.readExif(id)
+    imgInfoRecord[id].exif = info.ok ? (info.data || undefined) : undefined
 
-    return info.data
+    return info.ok ? info.data : undefined
   }
 
   async function cpExif(id: string) {
@@ -213,9 +192,9 @@
   }
 
   async function clearImgInfo() {
-    const res = await window.api.drainQueue()
-    if (res.code !== 0) {
-      Message.error(`清空失败！${res.message || ''}`)
+    const res = await window.platform.tasks.clear()
+    if (!res.ok) {
+      Message.error(`清空失败！${res.error.message || ''}`)
       return
     }
 
@@ -229,7 +208,7 @@
     <ActionItem {labelWidth} title='输出目录'>
       <svelte:fragment slot='popup'>图片输出目录，点击可以打开目录</svelte:fragment>
       <span class='db-icon-setting output-setting' on:click|stopPropagation={changeOutputPath} on:keypress role='button' tabindex='-1'></span>
-      <span class='open-file-line' on:click={() => openDir($config.output)} on:keypress role='button' tabindex='-1'>{outputDirName}</span>
+      <span class='open-file-line' on:click={openDir} on:keypress role='button' tabindex='-1'>{outputDirName}</span>
     </ActionItem>
 
     <ActionItem {labelWidth} title='主图占比'>
@@ -426,18 +405,18 @@
 
       <div class='img-wrap grass-inset'>
         <div class='img-list'>
-          {#each fileInfoList as i (i.id)}
-            {@const record = imgInfoRecord[i.id]}
-            {#key i.id}
+          {#each fileInfoList as i (i.taskId)}
+            {@const record = imgInfoRecord[i.taskId]}
+            {#key i.taskId}
               <div
-                class='img-item {selectedId === i.id ? 'selected' : ''}'
-                on:click={() => selectImage(i.id)}
+                class='img-item {selectedId === i.taskId ? 'selected' : ''}'
+                on:click={() => selectImage(i.taskId)}
                 on:keypress
                 role='button'
                 tabindex='-1'
               >
                 <div class='img-item-head'>
-                  <span class='img-name'>{i.name}</span>
+                  <span class='img-name'>{i.displayName}</span>
                   {#if record.faild}
                     <i class='db-icon-error error'></i>
                   {:else if record.progress < 100}
@@ -451,12 +430,12 @@
                 </div>
                 <div class='img-item-info'>
                   相机信息:
-                  {#await getExitInfo(i.id, i.path)}
+                  {#await getExitInfo(i.taskId)}
                     <i class='db-icon-loading'></i>
                   {:then v}
                     {#if v}
                       <i class='db-icon-success success'></i>
-                      <i class='icon db-icon-document-copy' on:click={() => cpExif(i.id)} on:keypress role='button' tabindex='-1'></i>
+                      <i class='icon db-icon-document-copy' on:click={() => cpExif(i.taskId)} on:keypress role='button' tabindex='-1'></i>
                     {:else}
                       <i class='db-icon-error error'></i>
                     {/if}

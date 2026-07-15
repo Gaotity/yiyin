@@ -3,7 +3,7 @@ import { toRoman } from '@common/utils'
 import { ExifBase } from './base'
 
 export class NikonExif extends ExifBase {
-  Model(): string {
+  override Model(): string {
     const v = this.exif.Model.replace(this.exif.Make.toUpperCase(), '').replace(/Z/gi, 'ℤ')
     const arr = v.split('_')
 

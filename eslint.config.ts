@@ -18,6 +18,7 @@ export default antfu(
       'e18e/prefer-static-regex': 'off',
       'no-self-assign': 'off',
       'no-irregular-whitespace': 'off',
+      'pnpm/yaml-enforce-settings': 'off',
     },
   },
 )

@@ -1,4 +1,9 @@
 node_modules
+.pnpm-store
+coverage
+playwright-report
+test-results
+*.tsbuildinfo
 out
 dist-electron
 .idea
@@ -22,5 +27,5 @@ pnpm-debug.log*
 *.njsproj
 *.sln
 *.sw?
-*.lock
 *.local
+.worktrees/

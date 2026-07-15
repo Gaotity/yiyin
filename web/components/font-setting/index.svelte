@@ -1,5 +1,5 @@
 <script lang='ts'>
-  import type { IFontParam } from '@src/interface'
+  import type { FontSettingsOverride as IFontParam } from '@common/models/config'
   import { ColorPicker, Radio, Switch } from '@ggchivalrous/db-ui'
   import { ActionItem, FontSelect } from '@web/components'
   import { config } from '@web/store/config'
@@ -51,7 +51,7 @@
     </ActionItem>
     <ActionItem title='字体'>
       <svelte:fragment slot='popup'>只对文本生效，指定该文本字体</svelte:fragment>
-      <FontSelect fontMap={$config.fontMap} bind:value={conf.font} clearable />
+      <FontSelect fonts={$config.fonts} bind:value={conf.font} clearable />
     </ActionItem>
   </div>
   <div class='param-font-item'>

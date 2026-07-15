@@ -1,24 +1,11 @@
 <script lang='ts'>
-  import { version } from '@web/store/version'
   import './index.scss'
 </script>
 
 <div class='app-footer'>
+  <p class='app-footer-item'>v{import.meta.env.VITE_VERSION}</p>
+  <p class='app-footer-item'>本地处理 · 暂停自动更新</p>
   <p class='app-footer-item'>
-    <a class:version-update={$version.curVersion < $version.newVersion} href={`https://github.com/ggchivalrous/yiyin/releases/tag/v${$version.curVersion}`} target='_blank'>
-      v{$version.curVersion}
-    </a>
-    {#if $version.curVersion < $version.newVersion}
-      ->
-      <a href={$version.downloadLink} target='_blank'>
-        v{$version.newVersion}
-      </a>
-    {/if}
-  </p>
-  <p class='app-footer-item'>
-    <a href='https://space.bilibili.com/94829489' target='_blank'>B站 - 不长肉的小伙吒</a>
-  </p>
-  <p class='app-footer-item'>
-    <a href='https://github.com/ggchivalrous/yiyin' target='_blank'>© 2023 Github - GGChivalrous.</a>
+    <a href='https://github.com/Gaotity/yiyin' target='_blank' rel='noreferrer'>© 2026 Gaotity</a>
   </p>
 </div>

@@ -1,16 +1,6 @@
-import type { IFont, IPosition } from '@src/interface'
+import type { Template } from '@common/models/config'
 
-export interface ITemp {
-  key: string
-  name: string
-  temp: string
-  use: boolean
-  type: 'system' | 'custom'
-  height?: number
-  font: IFont
-  position?: IPosition
-  verticalAlign: 'center' | 'baseline'
-}
+export type ITemp = Template
 
 export const defTemps: ITemp[] = [
   {
@@ -79,14 +69,14 @@ export function getDefTemp(d?: ITemp): ITemp {
       italic: false,
       color: '',
       caseType: 'default',
-      ...d?.font,
+      ...(d?.font ?? {}),
     },
     position: {
       left: null,
       right: null,
       top: null,
       bottom: null,
-      ...d?.position,
+      ...(d?.position ?? {}),
     },
   }
 }

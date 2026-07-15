@@ -1,5 +1,5 @@
 <script lang='ts'>
-  import type { IFieldInfoItem } from '@src/interface'
+  import type { FieldInfoItem as IFieldInfoItem } from '@common/models/config'
   import { Dropdown, DropdownItem, DropdownMenu } from '@ggchivalrous/db-ui'
   import { config } from '@web/store/config'
   import { createEventDispatcher } from 'svelte'

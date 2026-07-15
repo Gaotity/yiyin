@@ -2,69 +2,75 @@
   "name": "yiyin",
   "type": "module",
   "version": "1.6.0",
-  "description": "一款照片水印添加工具",
+  "packageManager": "pnpm@11.13.0",
+  "description": "A desktop photo watermarking tool",
   "author": {
-    "name": "ggchivalrous",
-    "url": "https://github.com/ggchivalrous/yiyin"
+    "name": "Gaotity",
+    "url": "https://github.com/Gaotity"
   },
-  "license": "MIT",
-  "repository": "https://github.com/ggchivalrous/yiyin",
+  "license": "GPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Gaotity/yiyin.git"
+  },
   "main": "dist-electron/main/index.js",
+  "engines": {
+    "node": ">=24 <25",
+    "pnpm": "11.13.0"
+  },
   "scripts": {
-    "start": "vite",
+    "dev": "pnpm electron:install && vite",
+    "electron:install": "install-electron",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "typecheck": "tsc -p tsconfig.web.json --noEmit && tsc -p tsconfig.electron.json --noEmit && tsc -p tsconfig.test.json --noEmit",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:integration": "pnpm electron:install && pnpm build && playwright test",
     "build": "vite build",
-    "tsc": "tsc --noEmit",
-    "package": "yarn build && electron-builder",
-    "make": "yarn build && electron-builder -p never",
-    "push:release": "node release.js",
-    "push:dev": "node dev.js",
-    "fix": "eslint --fix",
-    "release": "auto-release"
+    "package": "pnpm build && electron-builder --publish never",
+    "package:mac": "pnpm build && electron-builder --mac --publish never",
+    "package:win": "pnpm build && electron-builder --win --publish never",
+    "verify:package": "node scripts/verify-package.mjs",
+    "ci": "pnpm lint && pnpm typecheck && pnpm test:coverage && pnpm audit --prod --audit-level high && pnpm build"
   },
   "dependencies": {
-    "@ffmpeg-installer/ffmpeg": "^1.1.0",
-    "fluent-ffmpeg": "^2.1.2",
-    "octokit": "^3.1.0",
-    "sharp": "0.32.6"
+    "exifreader": "4.41.0",
+    "sharp": "0.35.3",
+    "zod": "4.4.3"
   },
   "devDependencies": {
-    "@antfu/eslint-config": "^8.1.1",
-    "@ggchivalrous/db-ui": "^1.3.1",
-    "@ggcv/auto-release": "^1.0.3",
-    "@sveltejs/vite-plugin-svelte": "^3.0.1",
-    "@types/adm-zip": "^0.5.5",
-    "@types/fluent-ffmpeg": "^2.1.21",
-    "@types/tar": "^6.1.11",
-    "adm-zip": "^0.5.12",
-    "axios": "^1.6.5",
-    "electron": "^24.2.0",
-    "electron-builder": "^24.6.3",
-    "eslint": "^10.2.0",
-    "eslint-plugin-format": "^2.0.1",
-    "eslint-plugin-svelte": "^3.17.0",
-    "exif-parser": "^0.1.12",
-    "exifreader": "^4.13.0",
-    "mime": "^3.0.0",
-    "sass": "^1.64.2",
-    "svelte": "^4.2.8",
-    "tar": "^6.2.0",
-    "typescript": "^5.0.4",
-    "vite": "^5.0.10",
-    "vite-plugin-electron": "^0.11.2",
-    "vite-plugin-electron-renderer": "^0.14.2"
+    "@antfu/eslint-config": "8.1.1",
+    "@electron/fuses": "2.1.3",
+    "@ggchivalrous/db-ui": "1.3.1",
+    "@playwright/test": "^1.55.0",
+    "@sveltejs/vite-plugin-svelte": "3.1.2",
+    "@types/node": "^24.0.0",
+    "@vitest/coverage-v8": "3.2.4",
+    "electron": "43.1.1",
+    "electron-builder": "26.15.3",
+    "eslint": "10.2.0",
+    "eslint-plugin-format": "2.0.1",
+    "eslint-plugin-svelte": "3.17.0",
+    "sass": "^1.93.0",
+    "svelte": "4.2.20",
+    "svelte-check": "^4.3.0",
+    "typescript": "5.9.3",
+    "vite": "5.4.21",
+    "vite-plugin-electron": "0.29.0",
+    "vitest": "3.2.4"
   },
   "build": {
-    "asar": false,
-    "appId": "com.ggchivalrous.yiyin",
+    "asar": true,
+    "appId": "io.github.gaotity.yiyin",
     "productName": "壹印",
-    "copyright": "Copyright © 2023 ${author}",
-    "directories": {},
-    "extends": [],
+    "copyright": "Copyright © 2026 Gaotity",
+    "artifactName": "yiyin-${version}-${platform}-${arch}.${ext}",
+    "afterPack": "scripts/after-pack.mjs",
     "extraMetadata": {
       "main": "./main/index.js",
-      "type": "commonjs"
+      "type": "module"
     },
-    "artifactName": "yiyin-${version}-${platform}-${arch}.${ext}",
     "files": [
       {
         "from": "dist-electron",
@@ -77,44 +83,15 @@
       "package.json"
     ],
     "mac": {
-      "icon": "./icon/icon.icns",
-      "category": "public.app-category.productivity",
-      "identity": null
-    },
-    "dmg": {
-      "icon": "./icon/icon.icns",
-      "iconSize": 100,
-      "contents": [
-        {
-          "x": 380,
-          "y": 280,
-          "type": "link",
-          "path": "/Applications"
-        },
-        {
-          "x": 110,
-          "y": 280,
-          "type": "file"
-        }
+      "category": "public.app-category.photography",
+      "identity": null,
+      "target": [
+        "dir"
       ]
     },
     "win": {
-      "icon": "./icon/icon.ico",
       "target": [
-        "msi",
-        "nsis"
-      ]
-    },
-    "nsis": {
-      "allowToChangeInstallationDirectory": true,
-      "oneClick": false,
-      "perMachine": false
-    },
-    "linux": {
-      "icon": "./icon/icon.ico",
-      "target": [
-        "deb",
-        "rpm"
+        "dir"
       ]
     }
   }

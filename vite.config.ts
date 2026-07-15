@@ -5,10 +5,7 @@ import process from 'node:process'
 import { svelte, vitePreprocess } from '@sveltejs/vite-plugin-svelte'
 import { defineConfig } from 'vite'
 import electron from 'vite-plugin-electron'
-
-import renderer from 'vite-plugin-electron-renderer'
 import pkg from './package.json'
-import installExiftool from './scripts/install-exiftool'
 
 const electronOutDir = join(__dirname, 'dist-electron')
 const electronPkg = join(electronOutDir, 'package.json')
@@ -19,7 +16,7 @@ const electronAlias = {
   '@config': resolve(__dirname, 'electron/src/config.ts'),
   '@modules': resolve(__dirname, 'electron/src/modules'),
   '@utils': resolve(__dirname, 'electron/src/utils'),
-  '@router': resolve(__dirname, 'electron/src/router'),
+  '@common': resolve(__dirname, 'common'),
 }
 
 function objToEnvStr(obj: Record<string, any>) {
@@ -42,11 +39,8 @@ export default defineConfig(async ({ command }) => {
     VERSION: pkg.version,
     DIST_ELECTRON: electronOutDir,
     WEB: join(electronOutDir, 'web'),
-    URL: isServe ? `http://localhost:${port}` : '',
+    URL: isServe ? `http://127.0.0.1:${port}` : '',
   }
-
-  env.PUBLIC = isServe ? join(__dirname, 'web/public') : env.WEB
-  env.EXIFTOOL = env.DIST_ELECTRON
 
   fs.writeFileSync(join(__dirname, '.env.local'), objToEnvStr(env))
   if (!fs.existsSync(electronOutDir)) {
@@ -57,11 +51,8 @@ export default defineConfig(async ({ command }) => {
   fs.writeFileSync(electronPkg, JSON.stringify({
     ...pkg,
     main: 'main/index.js',
-    type: 'commonjs',
+    type: 'module',
   }, null, 2))
-
-  // exiftool工具打包进来
-  await installExiftool(env.DIST_ELECTRON)
 
   return {
     root: 'web',
@@ -69,7 +60,7 @@ export default defineConfig(async ({ command }) => {
     plugins: [
       electron([
         {
-          entry: 'electron/main/index.ts',
+          entry: join(__dirname, 'electron/main/index.ts'),
           onstart(options) {
             if (process.env.VSCODE_DEBUG) {
               console.log(/* For `.vscode/.debug.script.mjs` */'[startup] Electron App')
@@ -84,6 +75,7 @@ export default defineConfig(async ({ command }) => {
               extensions: ['.ts', '.js', '.mjs'],
             },
             build: {
+              emptyOutDir: true,
               sourcemap: sourcemap ? 'inline' : undefined,
               minify: isBuild,
               outDir: join(electronOutDir, 'main'),
@@ -94,7 +86,7 @@ export default defineConfig(async ({ command }) => {
           },
         },
         {
-          entry: 'electron/preload/index.ts',
+          entry: join(__dirname, 'electron/preload/index.ts'),
           onstart(options) {
             options.reload()
           },
@@ -104,6 +96,12 @@ export default defineConfig(async ({ command }) => {
               extensions: ['.ts', '.js', '.mjs'],
             },
             build: {
+              emptyOutDir: true,
+              lib: {
+                entry: join(__dirname, 'electron/preload/index.ts'),
+                fileName: () => 'index.cjs',
+                formats: ['cjs'],
+              },
               sourcemap: sourcemap ? 'inline' : undefined,
               minify: isBuild,
               outDir: join(electronOutDir, 'preload'),
@@ -114,8 +112,6 @@ export default defineConfig(async ({ command }) => {
           },
         },
       ]),
-      // Use Node.js API in the Renderer-process
-      renderer(),
       svelte({
         preprocess: vitePreprocess(),
       }),
@@ -123,10 +119,11 @@ export default defineConfig(async ({ command }) => {
     clearScreen: false,
     server: {
       open: false,
-      host: '0.0.0.0',
+      host: '127.0.0.1',
       port,
     },
     build: {
+      emptyOutDir: true,
       outDir: env.WEB,
       rollupOptions: {
         input: {
@@ -138,7 +135,6 @@ export default defineConfig(async ({ command }) => {
       alias: {
         '@web': resolve(__dirname, 'web'),
         '@components': resolve(__dirname, 'web/components'),
-        '@common': resolve(__dirname, 'common'),
         '@web-utils': resolve(__dirname, 'web/util'),
         ...electronAlias,
       },

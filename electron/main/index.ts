@@ -8,6 +8,8 @@ import paths from '@src/path'
 import { formatDate, tryCatch } from '@utils'
 import { app } from 'electron'
 
+app.enableSandbox()
+
 const isDev = import.meta.env.DEV
 
 import('@src/config').then(async ({ config }) => {
@@ -46,7 +48,7 @@ process.on('uncaughtExceptionMonitor', (e) => {
 function onError(type: string, e: Error) {
   const appPath = app.getAppPath()
   const userDataPath = tryCatch(() => app.getPath('userData'), appPath)
-  const logPath = path.join(userDataPath, 'logs')
+  const logPath = path.join(userDataPath ?? appPath, 'logs')
 
   if (!fs.existsSync(logPath)) {
     fs.mkdirSync(logPath)

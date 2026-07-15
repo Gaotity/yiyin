@@ -1,12 +1,13 @@
 import type { ITemp } from '@common/const/def-temps'
-import type { Exif } from '@modules/exiftool/interface'
-import type { IConfig, IFieldInfoItem } from '@src/interface'
+import type { FieldInfoItem, FieldValue, OutputOptions } from '@common/models/config'
+import type { ExifData } from '@common/models/exif'
 
-export interface TextToolOption extends Pick<IConfig, 'options' | 'temps'> {
-  exif: Exif
+export interface TextToolOption {
+  options: OutputOptions
+  temps: ITemp[]
+  exif: ExifData
   bgHeight: number
-  logoPath: string
-  fields: IFieldInfoItem[]
+  fields: FieldInfoItem<FieldValue>[]
 }
 
 export interface IFont {
@@ -30,7 +31,7 @@ export interface IImgFileInfo {
 
 export interface ISlotInfo {
   value: string | HTMLImageElement
-  font: IFieldInfoItem['font']
+  font: FieldInfoItem['font']
 }
 
 export interface ITextOption extends Pick<ITemp, 'height' | 'font' | 'verticalAlign'> {

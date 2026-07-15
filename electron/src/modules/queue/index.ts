@@ -32,7 +32,7 @@ export class Queue<T = any> {
 
   constructor(opt?: QueueOption) {
     this.concurrency = opt?.concurrency || 1
-    this.opt = { autoRun: true, ...opt }
+    this.opt = { concurrency: this.concurrency, autoRun: true, ...opt }
   }
 
   add(d: T, id?: string) {
@@ -130,7 +130,7 @@ export class Queue<T = any> {
       const id = await tryAsyncCatch(Promise.race(awaitList.values()), null, (e) => {
         this.error('PromiseRace', e)
       })
-      awaitList.delete(id)
+      if (id) awaitList.delete(id)
     }
 
     this.status = 'drain'

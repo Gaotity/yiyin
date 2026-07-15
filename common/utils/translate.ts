@@ -17,10 +17,10 @@ export function toRoman(num: number) {
 
   let roman = ''
 
-  for (let i = 0; i < romanNumerals.length; i++) {
-    while (num >= romanNumerals[i].value) {
-      roman += romanNumerals[i].numeral
-      num -= romanNumerals[i].value
+  for (const item of romanNumerals) {
+    while (num >= item.value) {
+      roman += item.numeral
+      num -= item.value
     }
   }
 

@@ -1,35 +1,38 @@
-import { join } from 'node:path'
-
+import type { BrowserWindowConstructorOptions } from 'electron'
 import paths from '@src/path'
 import { BrowserWindow, shell } from 'electron'
+import { isAllowedExternalUrl, isTrustedRendererUrl } from '../security/urls'
 
-export async function createWindow(path: string, opts: Electron.BrowserWindowConstructorOptions) {
-  const win = new BrowserWindow({
-    ...opts,
+export async function createWindow(route: string, options: BrowserWindowConstructorOptions) {
+  const window = new BrowserWindow({
+    ...options,
     webPreferences: {
       preload: paths.preload,
-      ...opts?.webPreferences,
-      nodeIntegration: true,
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: true,
+      webSecurity: true,
+      allowRunningInsecureContent: false,
+      spellcheck: false,
     },
   })
 
-  if (import.meta.env.DEV) {
-    win.loadURL(join(import.meta.env.VITE_URL, path, 'index.html'))
-    win.on('ready-to-show', () => {
-      if (opts.show !== false) {
-        win.webContents.openDevTools()
-      }
-    })
-  }
-  else {
-    win.loadFile(join(paths.web, path, 'index.html'))
-  }
-
-  // 使用浏览器而不是应用程序打开所有链接
-  win.webContents.setWindowOpenHandler(({ url: _url }) => {
-    if (_url.startsWith('https:') || _url.startsWith('http:')) shell.openExternal(_url)
+  window.webContents.setWindowOpenHandler(({ url }) => {
+    if (isAllowedExternalUrl(url)) void shell.openExternal(url)
     return { action: 'deny' }
   })
+  window.webContents.on('will-navigate', (event, url) => {
+    if (!isTrustedRendererUrl(url, import.meta.env.DEV)) event.preventDefault()
+  })
+  window.webContents.session.setPermissionCheckHandler(() => false)
+  window.webContents.session.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false))
 
-  return win
+  if (import.meta.env.DEV) {
+    await window.loadURL(`http://127.0.0.1:5173/${route}/index.html`)
+  }
+  else {
+    await window.loadURL(`yiyin://app/${route}/index.html`)
+  }
+
+  return window
 }
