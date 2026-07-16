@@ -43,11 +43,75 @@ impl MetadataReader for ExifMetadataReader {
             Err(exif::Error::Io(error)) => {
                 return Err(ApplicationError::internal(error.to_string()));
             }
+            Err(exif::Error::InvalidFormat(_)) => {
+                if let Some(exif) = read_webp_exif(source)? {
+                    exif
+                } else if is_supported_image(source) {
+                    return Ok(None);
+                } else {
+                    return Err(ApplicationError::file_invalid());
+                }
+            }
             Err(_) => return Err(ApplicationError::file_invalid()),
         };
 
         Ok(normalize_metadata(&exif))
     }
+}
+
+fn read_webp_exif(source: &Path) -> Result<Option<Exif>, ApplicationError> {
+    let bytes = std::fs::read(source).map_err(map_open_error)?;
+    if bytes.len() < 12 || !bytes.starts_with(b"RIFF") || &bytes[8..12] != b"WEBP" {
+        return Ok(None);
+    }
+    let mut offset = 12_usize;
+    while offset.checked_add(8).is_some_and(|end| end <= bytes.len()) {
+        let chunk_name = &bytes[offset..offset + 4];
+        let chunk_size = u32::from_le_bytes(
+            bytes[offset + 4..offset + 8]
+                .try_into()
+                .map_err(|_| ApplicationError::file_invalid())?,
+        );
+        let chunk_size =
+            usize::try_from(chunk_size).map_err(|_| ApplicationError::file_invalid())?;
+        let data_start = offset + 8;
+        let data_end = data_start
+            .checked_add(chunk_size)
+            .ok_or_else(ApplicationError::file_invalid)?;
+        if data_end > bytes.len() {
+            return Err(ApplicationError::file_invalid());
+        }
+        if chunk_name == b"EXIF" {
+            let data = bytes[data_start..data_end]
+                .strip_prefix(b"Exif\0\0")
+                .unwrap_or(&bytes[data_start..data_end]);
+            let result = exif::Reader::new()
+                .continue_on_error(true)
+                .read_raw(data.to_vec());
+            return match result {
+                Ok(exif) => Ok(Some(exif)),
+                Err(exif::Error::PartialResult(partial)) => Ok(Some(partial.into_inner().0)),
+                Err(_) => Ok(None),
+            };
+        }
+        let padded = chunk_size
+            .checked_add(chunk_size % 2)
+            .ok_or_else(ApplicationError::file_invalid)?;
+        offset = data_start
+            .checked_add(padded)
+            .ok_or_else(ApplicationError::file_invalid)?;
+    }
+    Ok(None)
+}
+
+fn is_supported_image(source: &Path) -> bool {
+    let Ok(bytes) = std::fs::read(source) else {
+        return false;
+    };
+    let supported_signature = bytes.starts_with(&[0xff, 0xd8, 0xff])
+        || bytes.starts_with(b"\x89PNG\r\n\x1a\n")
+        || (bytes.len() >= 12 && bytes.starts_with(b"RIFF") && &bytes[8..12] == b"WEBP");
+    supported_signature && image::load_from_memory(&bytes).is_ok()
 }
 
 fn normalize_metadata(exif: &Exif) -> Option<Metadata> {
@@ -114,7 +178,9 @@ fn normalize_metadata(exif: &Exif) -> Option<Metadata> {
     );
     metadata.set_density(normalized_density(exif));
 
-    (!metadata.is_empty()).then_some(metadata)
+    let has_render_metadata =
+        !metadata.is_empty() || metadata.orientation().is_some() || metadata.density().is_some();
+    has_render_metadata.then_some(metadata)
 }
 
 fn field(exif: &Exif, tag: Tag) -> Option<&Field> {

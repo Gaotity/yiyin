@@ -196,12 +196,27 @@ impl TaskSnapshot {
 pub struct RenderResult {
     task_id: TaskId,
     resource: ResourceSnapshot,
+    dimensions: ImageDimensions,
+    density: Option<ImageDensity>,
+    encoder_quality: u8,
 }
 
 impl RenderResult {
     #[must_use]
-    pub const fn new(task_id: TaskId, resource: ResourceSnapshot) -> Self {
-        Self { task_id, resource }
+    pub const fn new(
+        task_id: TaskId,
+        resource: ResourceSnapshot,
+        dimensions: ImageDimensions,
+        density: Option<ImageDensity>,
+        encoder_quality: u8,
+    ) -> Self {
+        Self {
+            task_id,
+            resource,
+            dimensions,
+            density,
+            encoder_quality,
+        }
     }
 
     #[must_use]
@@ -212,6 +227,21 @@ impl RenderResult {
     #[must_use]
     pub const fn resource(&self) -> &ResourceSnapshot {
         &self.resource
+    }
+
+    #[must_use]
+    pub const fn dimensions(&self) -> ImageDimensions {
+        self.dimensions
+    }
+
+    #[must_use]
+    pub const fn density(&self) -> Option<ImageDensity> {
+        self.density
+    }
+
+    #[must_use]
+    pub const fn encoder_quality(&self) -> u8 {
+        self.encoder_quality
     }
 }
 

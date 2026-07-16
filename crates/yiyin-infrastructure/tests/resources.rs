@@ -202,3 +202,46 @@ fn generated_ids_are_opaque_uuid_capabilities() {
             .contains(Path::new("/").to_string_lossy().as_ref())
     );
 }
+
+#[test]
+fn registration_reports_dimensions_after_exif_orientation() {
+    let harness = Harness::new();
+    let source = harness.copy_fixture("exif-orientation-6.jpg", "oriented.jpg");
+
+    let record = harness
+        .registry
+        .register_input(&source)
+        .expect("register oriented image");
+
+    assert_eq!(
+        record.dimensions(),
+        Some(yiyin_domain::ImageDimensions::new(1436, 2188).expect("dimensions"))
+    );
+}
+
+#[test]
+fn removing_generated_resources_deletes_only_preview_cache_files() {
+    let harness = Harness::new();
+    let preview = harness.copy_fixture("landscape-default.jpg", "preview.jpg");
+    let output = harness.copy_fixture("landscape-default.jpg", "output.jpg");
+    let preview_record = harness
+        .registry
+        .register_generated(ResourceKind::Preview, &preview, "Preview")
+        .expect("register preview");
+    let output_record = harness
+        .registry
+        .register_generated(ResourceKind::Output, &output, "Output")
+        .expect("register output");
+
+    harness
+        .registry
+        .remove(preview_record.id())
+        .expect("remove preview");
+    harness
+        .registry
+        .remove(output_record.id())
+        .expect("remove output record");
+
+    assert!(!preview.exists());
+    assert!(output.exists());
+}

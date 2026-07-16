@@ -161,13 +161,14 @@ impl Metadata {
 
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.values.is_empty() && self.orientation.is_none() && self.density.is_none()
+        self.values.is_empty()
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{BuiltInField, Metadata};
+    use super::{BuiltInField, ImageOrientation, Metadata};
+    use crate::ImageDensity;
 
     #[test]
     fn normalized_metadata_omits_empty_values() {
@@ -178,5 +179,16 @@ mod tests {
         metadata.set(BuiltInField::Make, "Nikon");
         assert_eq!(metadata.value(BuiltInField::Make), Some("Nikon"));
         assert!(!metadata.is_empty());
+    }
+
+    #[test]
+    fn renderer_only_image_metadata_does_not_create_copy_exif_fields() {
+        let mut metadata = Metadata::default();
+        metadata.set_orientation(Some(ImageOrientation::Rotate90));
+        metadata.set_density(Some(ImageDensity::new(300).expect("density")));
+
+        assert!(metadata.is_empty());
+        assert_eq!(metadata.orientation(), Some(ImageOrientation::Rotate90));
+        assert_eq!(metadata.density().map(ImageDensity::get), Some(300));
     }
 }

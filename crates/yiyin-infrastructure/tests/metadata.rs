@@ -80,6 +80,22 @@ fn nikon_and_sony_fixture_values_remain_copy_exif_compatible() {
 }
 
 #[test]
+fn webp_exif_chunk_uses_the_same_normalization_pipeline() {
+    let metadata = ExifMetadataReader
+        .read(&fixtures().join("webp-default.webp"))
+        .expect("read WebP EXIF")
+        .expect("WebP metadata");
+
+    assert_eq!(metadata.value(BuiltInField::Make), Some("ACME CORPORATION"));
+    assert_eq!(metadata.value(BuiltInField::Model), Some("Camera One"));
+    assert_eq!(metadata.value(BuiltInField::ExposureTime), Some("1/125"));
+    assert_eq!(
+        metadata.density().map(yiyin_domain::ImageDensity::get),
+        Some(300)
+    );
+}
+
+#[test]
 fn orientation_is_extracted_without_crossing_the_template_field_boundary() {
     let metadata = ExifMetadataReader
         .read(&fixtures().join("exif-orientation-6.jpg"))

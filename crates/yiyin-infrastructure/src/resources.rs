@@ -9,7 +9,9 @@ use image::GenericImageView;
 use yiyin_application::{
     ApplicationError, IdGenerator, MetadataReader, ResourceRecord, ResourceRepository,
 };
-use yiyin_domain::{ImageDensity, ImageDimensions, ResourceId, ResourceKind, TaskId};
+use yiyin_domain::{
+    ImageDensity, ImageDimensions, ImageOrientation, ResourceId, ResourceKind, TaskId,
+};
 
 use crate::{DirectoryEntryKind, ExifMetadataReader, FileSystem, StdFileSystem};
 
@@ -50,6 +52,38 @@ impl ResourceRegistry {
     #[must_use]
     pub fn owned_root(&self) -> &Path {
         &self.owned_root
+    }
+
+    /// Registers an already atomically published Rust-generated image.
+    ///
+    /// # Errors
+    ///
+    /// Returns `FORBIDDEN` for non-generated kinds and stable file errors for
+    /// missing or invalid image bytes.
+    pub fn register_generated(
+        &self,
+        kind: ResourceKind,
+        source: &Path,
+        display_name: &str,
+    ) -> Result<ResourceRecord, ApplicationError> {
+        if !matches!(kind, ResourceKind::Output | ResourceKind::Preview) {
+            return Err(ApplicationError::forbidden());
+        }
+        let parent = source.parent().ok_or_else(ApplicationError::file_invalid)?;
+        let allowed_root = self.filesystem.canonicalize(parent).map_err(internal_io)?;
+        let (canonical, inspected) = self.inspect_source(source, kind)?;
+        if !canonical.starts_with(&allowed_root) {
+            return Err(ApplicationError::forbidden());
+        }
+        let record = build_record(
+            self.next_resource_id(),
+            kind,
+            display_name,
+            canonical,
+            &inspected,
+            allowed_root,
+        );
+        self.insert(record)
     }
 
     fn inspect_source(
@@ -201,9 +235,11 @@ impl ResourceRepository for ResourceRegistry {
             .map_err(|_| ApplicationError::internal("resource registry lock poisoned"))?
             .remove(id)
             .ok_or_else(ApplicationError::resource_not_found)?;
-        if matches!(record.kind(), ResourceKind::Font | ResourceKind::Overlay)
-            && record.source().starts_with(&self.owned_root)
-        {
+        let owned_resource = matches!(record.kind(), ResourceKind::Font | ResourceKind::Overlay)
+            && record.source().starts_with(&self.owned_root);
+        let generated_preview = record.kind() == ResourceKind::Preview
+            && record.source().starts_with(record.allowed_root());
+        if owned_resource || generated_preview {
             remove_if_present(self.filesystem.as_ref(), record.source())?;
         }
         Ok(())
@@ -252,9 +288,12 @@ fn inspect_file(
     kind: ResourceKind,
 ) -> Result<InspectedFile, ApplicationError> {
     match kind {
-        ResourceKind::Input | ResourceKind::Overlay => inspect_image(bytes, path),
+        ResourceKind::Input
+        | ResourceKind::Overlay
+        | ResourceKind::Output
+        | ResourceKind::Preview => inspect_image(bytes, path),
         ResourceKind::Font => inspect_font(bytes, path),
-        _ => Err(ApplicationError::forbidden()),
+        ResourceKind::BundledAsset => Err(ApplicationError::forbidden()),
     }
 }
 
@@ -337,12 +376,26 @@ fn build_record(
 }
 
 fn populate_image_density(inspected: &mut InspectedFile, source: &Path) {
-    if inspected.dimensions.is_some() {
-        inspected.density = ExifMetadataReader
-            .read(source)
-            .ok()
-            .flatten()
-            .and_then(|metadata| metadata.density());
+    if inspected.dimensions.is_some()
+        && let Some(metadata) = ExifMetadataReader.read(source).ok().flatten()
+    {
+        inspected.density = if inspected.mime_type == "image/webp" {
+            None
+        } else {
+            metadata.density()
+        };
+        if matches!(
+            metadata.orientation(),
+            Some(
+                ImageOrientation::MirrorHorizontalRotate270
+                    | ImageOrientation::Rotate90
+                    | ImageOrientation::MirrorHorizontalRotate90
+                    | ImageOrientation::Rotate270
+            )
+        ) && let Some(dimensions) = inspected.dimensions
+        {
+            inspected.dimensions = ImageDimensions::new(dimensions.height, dimensions.width).ok();
+        }
     }
 }
 

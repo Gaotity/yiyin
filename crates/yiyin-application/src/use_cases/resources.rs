@@ -187,6 +187,9 @@ impl ReadTaskExif {
             .registered(id)
             .ok_or_else(ApplicationError::task_not_found)?;
         let resource = self.resources.resolve(task.input())?;
-        self.metadata.read(resource.source())
+        Ok(self
+            .metadata
+            .read(resource.source())?
+            .filter(|metadata| !metadata.is_empty()))
     }
 }

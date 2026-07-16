@@ -5,11 +5,13 @@
 mod config;
 mod filesystem;
 mod metadata;
+mod rendering;
 mod resources;
 
 pub use config::*;
 pub use filesystem::*;
 pub use metadata::*;
+pub use rendering::*;
 pub use resources::*;
 pub use yiyin_application as application;
 pub use yiyin_domain as domain;
