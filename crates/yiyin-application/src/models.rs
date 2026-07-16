@@ -121,6 +121,7 @@ pub struct TaskSnapshot {
     state: TaskState,
     progress: u8,
     preview: bool,
+    resource: Option<ResourceSnapshot>,
 }
 
 impl TaskSnapshot {
@@ -132,6 +133,7 @@ impl TaskSnapshot {
             state: TaskState::Registered,
             progress: 0,
             preview: false,
+            resource: None,
         }
     }
 
@@ -149,7 +151,14 @@ impl TaskSnapshot {
             state,
             progress,
             preview,
+            resource: None,
         }
+    }
+
+    #[must_use]
+    pub fn with_resource(mut self, resource: ResourceSnapshot) -> Self {
+        self.resource = Some(resource);
+        self
     }
 
     #[must_use]
@@ -175,6 +184,11 @@ impl TaskSnapshot {
     #[must_use]
     pub const fn is_preview(&self) -> bool {
         self.preview
+    }
+
+    #[must_use]
+    pub const fn resource(&self) -> Option<&ResourceSnapshot> {
+        self.resource.as_ref()
     }
 }
 

@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 
-use crate::{DomainError, RenderOptions, ResourceId, TaskId};
+use crate::{Config, DomainError, Metadata, RenderOptions, ResourceId, TaskId};
 
 const SHADOW_SURFACE_WIDTH_CAP: u32 = 10_240;
 const TEXT_BOTTOM_OFFSET_RATE: f64 = 0.027;
@@ -88,7 +88,8 @@ pub struct RenderRequest {
     output_name: String,
     input_dimensions: ImageDimensions,
     density: Option<ImageDensity>,
-    options: RenderOptions,
+    config: Config,
+    metadata: Metadata,
     text_rows: Vec<TextMeasurement>,
     preview: bool,
 }
@@ -102,13 +103,37 @@ impl RenderRequest {
         input_dimensions: ImageDimensions,
         options: RenderOptions,
     ) -> Self {
+        let config = Config {
+            options,
+            ..Config::default()
+        };
+        Self::freeze(
+            task_id,
+            input,
+            output_name,
+            input_dimensions,
+            config,
+            Metadata::default(),
+        )
+    }
+
+    #[must_use]
+    pub fn freeze(
+        task_id: TaskId,
+        input: ResourceId,
+        output_name: impl Into<String>,
+        input_dimensions: ImageDimensions,
+        config: Config,
+        metadata: Metadata,
+    ) -> Self {
         Self {
             task_id,
             input,
             output_name: output_name.into(),
             input_dimensions,
             density: None,
-            options,
+            config,
+            metadata,
             text_rows: Vec::new(),
             preview: false,
         }
@@ -159,7 +184,17 @@ impl RenderRequest {
 
     #[must_use]
     pub const fn options(&self) -> &RenderOptions {
-        &self.options
+        &self.config.options
+    }
+
+    #[must_use]
+    pub const fn config(&self) -> &Config {
+        &self.config
+    }
+
+    #[must_use]
+    pub const fn metadata(&self) -> &Metadata {
+        &self.metadata
     }
 
     #[must_use]
@@ -215,39 +250,39 @@ impl RenderPlan {
     /// non-finite or larger-than-`u32` surface.
     pub fn build(request: &RenderRequest) -> Result<Self, DomainError> {
         let input = request.input_dimensions;
-        let adjusted = ratio_adjusted_dimensions(input, &request.options)?;
-        let reset = apply_landscape(adjusted, &request.options);
+        let adjusted = ratio_adjusted_dimensions(input, request.options())?;
+        let reset = apply_landscape(adjusted, request.options());
         let initial_background = expand_for_main_width(
             input.height,
             reset,
             input.width,
-            request.options.main_image_width.get(),
+            request.options().main_image_width.get(),
         )?;
         let bottom_offset = f64::from(initial_background.height) * TEXT_BOTTOM_OFFSET_RATE;
         let content = vertical_spacing(
             initial_background.height,
             input.height,
             &request.text_rows,
-            &request.options,
+            request.options(),
         )?;
         let canvas = expand_for_main_width(
             content.height,
             reset,
             input.width,
-            request.options.main_image_width.get(),
+            request.options().main_image_width.get(),
         )?;
         let main_rect = recenter_content(canvas, input, content.height, content.top)?;
         let text_rows = place_text_rows(canvas, &request.text_rows, bottom_offset)?;
         let mask_surface = shadow_surface(canvas)?;
         let scaled_main_height = ceil_u32(f64::from(input.height) * mask_surface.scale)?;
-        let shadow_blur = if request.options.shadow_visible {
-            f64::from(scaled_main_height) * (request.options.shadow.get() / 100.0)
+        let shadow_blur = if request.options().shadow_visible {
+            f64::from(scaled_main_height) * (request.options().shadow.get() / 100.0)
                 / mask_surface.scale
         } else {
             0.0
         };
-        let corner_radius = if request.options.radius_visible {
-            f64::from(scaled_main_height) * (request.options.radius.get() / 100.0)
+        let corner_radius = if request.options().radius_visible {
+            f64::from(scaled_main_height) * (request.options().radius.get() / 100.0)
                 / mask_surface.scale
         } else {
             0.0
