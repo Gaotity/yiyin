@@ -1,122 +1,51 @@
 {
   "name": "yiyin",
-  "type": "module",
   "version": "1.6.0",
+  "private": true,
+  "type": "module",
   "description": "一款照片水印添加工具",
   "author": {
     "name": "ggchivalrous",
     "url": "https://github.com/ggchivalrous/yiyin"
   },
-  "license": "MIT",
+  "license": "GPL-3.0-only",
   "repository": "https://github.com/ggchivalrous/yiyin",
-  "main": "dist-electron/main/index.js",
+  "packageManager": "pnpm@11.13.0",
+  "engines": {
+    "node": "24.x",
+    "pnpm": "11.13.0"
+  },
   "scripts": {
-    "start": "vite",
+    "dev": "vite",
+    "format:check": "biome format .",
+    "lint": "biome lint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:ui": "playwright test",
     "build": "vite build",
-    "tsc": "tsc --noEmit",
-    "package": "yarn build && electron-builder",
-    "make": "yarn build && electron-builder -p never",
-    "push:release": "node release.js",
-    "push:dev": "node dev.js",
-    "fix": "eslint --fix",
-    "release": "auto-release"
+    "tauri": "tauri",
+    "audit": "pnpm audit --audit-level high",
+    "ci": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
   },
   "dependencies": {
-    "@ffmpeg-installer/ffmpeg": "^1.1.0",
-    "fluent-ffmpeg": "^2.1.2",
-    "octokit": "^3.1.0",
-    "sharp": "0.32.6"
+    "@base-ui/react": "1.6.0",
+    "@tauri-apps/api": "2.11.1",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "react-hook-form": "7.81.0"
   },
   "devDependencies": {
-    "@antfu/eslint-config": "^8.1.1",
-    "@ggchivalrous/db-ui": "^1.3.1",
-    "@ggcv/auto-release": "^1.0.3",
+    "@biomejs/biome": "2.5.4",
     "@playwright/test": "1.61.1",
-    "@sveltejs/vite-plugin-svelte": "^3.0.1",
-    "@types/adm-zip": "^0.5.5",
-    "@types/fluent-ffmpeg": "^2.1.21",
-    "@types/tar": "^6.1.11",
-    "adm-zip": "^0.5.12",
-    "axios": "^1.6.5",
-    "electron": "^24.2.0",
-    "electron-builder": "^24.6.3",
-    "eslint": "^10.2.0",
-    "eslint-plugin-format": "^2.0.1",
-    "eslint-plugin-svelte": "^3.17.0",
-    "exif-parser": "^0.1.12",
-    "exifreader": "^4.13.0",
-    "mime": "^3.0.0",
-    "sass": "^1.64.2",
-    "svelte": "^4.2.8",
-    "tar": "^6.2.0",
-    "typescript": "^5.0.4",
-    "vite": "^5.0.10",
-    "vite-plugin-electron": "^0.11.2",
-    "vite-plugin-electron-renderer": "^0.14.2"
-  },
-  "build": {
-    "asar": false,
-    "appId": "com.ggchivalrous.yiyin",
-    "productName": "壹印",
-    "copyright": "Copyright © 2023 ${author}",
-    "directories": {},
-    "extends": [],
-    "extraMetadata": {
-      "main": "./main/index.js",
-      "type": "commonjs"
-    },
-    "artifactName": "yiyin-${version}-${platform}-${arch}.${ext}",
-    "files": [
-      {
-        "from": "dist-electron",
-        "to": ".",
-        "filter": [
-          "**/*",
-          "!package.json"
-        ]
-      },
-      "package.json"
-    ],
-    "mac": {
-      "icon": "./icon/icon.icns",
-      "category": "public.app-category.productivity",
-      "identity": null
-    },
-    "dmg": {
-      "icon": "./icon/icon.icns",
-      "iconSize": 100,
-      "contents": [
-        {
-          "x": 380,
-          "y": 280,
-          "type": "link",
-          "path": "/Applications"
-        },
-        {
-          "x": 110,
-          "y": 280,
-          "type": "file"
-        }
-      ]
-    },
-    "win": {
-      "icon": "./icon/icon.ico",
-      "target": [
-        "msi",
-        "nsis"
-      ]
-    },
-    "nsis": {
-      "allowToChangeInstallationDirectory": true,
-      "oneClick": false,
-      "perMachine": false
-    },
-    "linux": {
-      "icon": "./icon/icon.ico",
-      "target": [
-        "deb",
-        "rpm"
-      ]
-    }
+    "@tauri-apps/cli": "2.11.4",
+    "@testing-library/dom": "10.4.1",
+    "@testing-library/react": "16.3.2",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "6.0.3",
+    "jsdom": "29.1.1",
+    "typescript": "5.9.3",
+    "vite": "8.1.4",
+    "vitest": "4.1.10"
   }
 }

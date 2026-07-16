@@ -1,7 +1,6 @@
+packages:
+  - .
+
 allowBuilds:
-  '@ffmpeg-installer/darwin-arm64': true
   '@parcel/watcher': true
-  electron: true
   esbuild: true
-  exifreader: true
-  sharp: true
