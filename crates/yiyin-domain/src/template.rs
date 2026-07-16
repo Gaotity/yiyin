@@ -141,7 +141,7 @@ pub enum VerticalAlign {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum FieldContentKind {
+pub enum FieldContentKind {
     Text,
     Image,
 }
@@ -211,12 +211,51 @@ impl TemplateField {
         self.visible
     }
 
+    #[must_use]
+    pub const fn uses_custom_value(&self) -> bool {
+        self.use_custom_value
+    }
+
+    #[must_use]
+    pub const fn forces_custom_value(&self) -> bool {
+        self.force_custom_value
+    }
+
+    #[must_use]
+    pub fn custom_value(&self) -> &str {
+        &self.custom_value
+    }
+
+    #[must_use]
+    pub const fn content_kind(&self) -> FieldContentKind {
+        self.content_kind
+    }
+
+    #[must_use]
+    pub const fn dark_image(&self) -> Option<&ResourceId> {
+        self.dark_image.as_ref()
+    }
+
+    #[must_use]
+    pub const fn light_image(&self) -> Option<&ResourceId> {
+        self.light_image.as_ref()
+    }
+
+    #[must_use]
+    pub const fn font_override(&self) -> Option<&FontSpec> {
+        self.font_override.as_ref()
+    }
+
     pub fn set_visible(&mut self, visible: bool) {
         self.visible = visible;
     }
 
     pub fn set_custom_text(&mut self, value: impl Into<String>, force: bool) {
-        self.use_custom_value = true;
+        self.set_custom_text_state(value, true, force);
+    }
+
+    pub fn set_custom_text_state(&mut self, value: impl Into<String>, enabled: bool, force: bool) {
+        self.use_custom_value = enabled;
         self.force_custom_value = force;
         self.custom_value = value.into();
         self.content_kind = FieldContentKind::Text;
@@ -372,6 +411,39 @@ impl Template {
     #[must_use]
     pub const fn vertical_align(&self) -> VerticalAlign {
         self.vertical_align
+    }
+
+    pub fn set_name(&mut self, name: impl Into<String>) {
+        self.name = name.into();
+    }
+
+    pub fn set_format(&mut self, format: impl Into<String>) {
+        self.format = format.into();
+    }
+
+    pub fn set_enabled(&mut self, enabled: bool) {
+        self.enabled = enabled;
+    }
+
+    /// Sets an optional positive template height.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DomainError::OutOfRange`] for non-positive or non-finite values.
+    pub fn set_height(&mut self, height: Option<f64>) -> Result<(), DomainError> {
+        if height.is_some_and(|value| !value.is_finite() || value <= 0.0) {
+            return Err(DomainError::OutOfRange("template_height"));
+        }
+        self.height = height;
+        Ok(())
+    }
+
+    pub fn set_font(&mut self, font: FontSpec) {
+        self.font = font;
+    }
+
+    pub fn set_vertical_align(&mut self, vertical_align: VerticalAlign) {
+        self.vertical_align = vertical_align;
     }
 }
 
