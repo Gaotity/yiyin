@@ -1,5 +1,38 @@
 use std::collections::BTreeMap;
 
+use crate::ImageDensity;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u8)]
+pub enum ImageOrientation {
+    Normal = 1,
+    MirrorHorizontal = 2,
+    Rotate180 = 3,
+    MirrorVertical = 4,
+    MirrorHorizontalRotate270 = 5,
+    Rotate90 = 6,
+    MirrorHorizontalRotate90 = 7,
+    Rotate270 = 8,
+}
+
+impl TryFrom<u32> for ImageOrientation {
+    type Error = ();
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        match value {
+            1 => Ok(Self::Normal),
+            2 => Ok(Self::MirrorHorizontal),
+            3 => Ok(Self::Rotate180),
+            4 => Ok(Self::MirrorVertical),
+            5 => Ok(Self::MirrorHorizontalRotate270),
+            6 => Ok(Self::Rotate90),
+            7 => Ok(Self::MirrorHorizontalRotate90),
+            8 => Ok(Self::Rotate270),
+            _ => Err(()),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum BuiltInField {
     PersonalSign,
@@ -89,6 +122,8 @@ impl BuiltInField {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Metadata {
     values: BTreeMap<BuiltInField, String>,
+    orientation: Option<ImageOrientation>,
+    density: Option<ImageDensity>,
 }
 
 impl Metadata {
@@ -106,9 +141,27 @@ impl Metadata {
         self.values.get(&field).map(String::as_str)
     }
 
+    pub fn set_orientation(&mut self, orientation: Option<ImageOrientation>) {
+        self.orientation = orientation;
+    }
+
+    #[must_use]
+    pub const fn orientation(&self) -> Option<ImageOrientation> {
+        self.orientation
+    }
+
+    pub fn set_density(&mut self, density: Option<ImageDensity>) {
+        self.density = density;
+    }
+
+    #[must_use]
+    pub const fn density(&self) -> Option<ImageDensity> {
+        self.density
+    }
+
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.values.is_empty()
+        self.values.is_empty() && self.orientation.is_none() && self.density.is_none()
     }
 }
 
