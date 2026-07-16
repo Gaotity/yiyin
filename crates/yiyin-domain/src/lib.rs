@@ -5,11 +5,15 @@
 mod config;
 mod error;
 mod metadata;
+mod render;
 mod resource;
+mod task;
 mod template;
 
 pub use config::*;
 pub use error::DomainError;
 pub use metadata::*;
+pub use render::*;
 pub use resource::*;
+pub use task::*;
 pub use template::*;

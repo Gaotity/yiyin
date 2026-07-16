@@ -37,5 +37,6 @@ jq -e '
 ' <<<"$metadata" >/dev/null
 
 ! rg -n \
-  '(^|[^[:alnum:]_-])(tauri|serde|serde_json|image|tokio|uuid|exif|cosmic-text)([^[:alnum:]_-]|$)' \
-  crates/yiyin-domain crates/yiyin-application
+  '((use|extern crate)[[:space:]]+(tauri|serde|serde_json|image|tokio|uuid|exif|cosmic_text)(::|[[:space:]]|;)|(^|[^[:alnum:]_])(tauri|serde|serde_json|image|tokio|uuid|exif|cosmic_text)::)' \
+  crates/yiyin-domain crates/yiyin-application \
+  --glob '*.rs'
