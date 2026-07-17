@@ -173,6 +173,7 @@ impl AppState {
         fs::create_dir_all(&app_data).map_err(internal_io)?;
         fs::create_dir_all(&app_cache).map_err(internal_io)?;
 
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
         let legacy_base = app_data.parent().unwrap_or(&app_data);
         #[cfg(target_os = "macos")]
         let legacy_candidates = macos_candidates(legacy_base).to_vec();
