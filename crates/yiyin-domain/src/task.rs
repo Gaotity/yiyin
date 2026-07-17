@@ -45,6 +45,7 @@ pub enum CancellationReason {
     User,
     PreviewSuperseded,
     Cleared,
+    Shutdown,
 }
 
 /// Applies a legal task state transition.

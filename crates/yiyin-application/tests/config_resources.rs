@@ -164,6 +164,10 @@ impl TaskQueue for FakeQueue {
         Ok(())
     }
 
+    fn shutdown(&self) -> Result<(), ApplicationError> {
+        Ok(())
+    }
+
     fn snapshot(&self) -> Vec<TaskSnapshot> {
         self.registered
             .lock()

@@ -247,6 +247,10 @@ impl TaskQueue for FakeQueue {
         Ok(())
     }
 
+    fn shutdown(&self) -> Result<(), ApplicationError> {
+        Ok(())
+    }
+
     fn snapshot(&self) -> Vec<TaskSnapshot> {
         let state = self.0.lock().expect("queue lock");
         state

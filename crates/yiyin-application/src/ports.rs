@@ -170,6 +170,7 @@ pub trait TaskQueue: Send + Sync {
     fn preview(&self, request: RenderRequest) -> Result<(), ApplicationError>;
     fn cancel(&self, id: &TaskId) -> Result<(), ApplicationError>;
     fn clear(&self) -> Result<(), ApplicationError>;
+    fn shutdown(&self) -> Result<(), ApplicationError>;
     fn snapshot(&self) -> Vec<TaskSnapshot>;
 }
 
