@@ -153,10 +153,27 @@ function scanPayload(artifact, errors) {
       const isApplePlistDtd =
         basename(lowerPath) === 'info.plist' &&
         url === 'http://www.apple.com/dtds/propertylist-1.0.dtd'
-      if (!url.startsWith('http://ipc.localhost') && !isApplePlistDtd) {
+      if (!isAllowedIpcUrl(url) && !isApplePlistDtd) {
         errors.push(`remote URL found: ${url}`)
       }
     }
+  }
+}
+
+function isAllowedIpcUrl(value) {
+  try {
+    const url = new URL(value)
+    const authority = value.match(/^http:\/\/([^/?#]+)/)?.[1]
+    return (
+      url.protocol === 'http:' &&
+      url.hostname === 'ipc.localhost' &&
+      authority === 'ipc.localhost' &&
+      url.port === '' &&
+      url.username === '' &&
+      url.password === ''
+    )
+  } catch {
+    return false
   }
 }
 

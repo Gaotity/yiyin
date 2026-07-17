@@ -97,6 +97,24 @@ describe('bundle verification', () => {
       module.verifyBundle({ platform: 'macos', artifact: fixture, root }),
     ).toEqual([])
 
+    const runtime = join(fixture, 'Contents', 'Resources', 'runtime.js')
+    writeFileSync(runtime, 'http://ipc.localhost')
+    expect(
+      module.verifyBundle({ platform: 'macos', artifact: fixture, root }),
+    ).toEqual([])
+
+    for (const remoteUrl of [
+      'http://ipc.localhost.evil.example',
+      'http://ipc.localhost:80',
+      'http://user@ipc.localhost',
+      'http://%',
+    ]) {
+      writeFileSync(runtime, remoteUrl)
+      expect(
+        module.verifyBundle({ platform: 'macos', artifact: fixture, root }),
+      ).toEqual(expect.arrayContaining([expect.stringContaining('remote URL')]))
+    }
+
     writeFileSync(
       join(fixture, 'Contents', 'Resources', 'electron-source.js.map'),
       'svelte sharp https://example.com',
@@ -129,6 +147,72 @@ describe('W3C smoke command', () => {
     ).toEqual({
       application: 'target/release/yiyin.exe',
       baseUrl: 'http://127.0.0.1:4444',
+    })
+  })
+
+  it('waits for driver readiness before creating exactly one session', async () => {
+    const path = resolve(root, 'scripts/w3c-smoke.mjs')
+    const module = await importIfPresent<{
+      waitForDriver(
+        command: (
+          method: string,
+          path: string,
+          body?: unknown,
+          timeout?: number,
+        ) => Promise<unknown>,
+        timeout?: number,
+      ): Promise<void>
+      createSession(
+        command: (
+          method: string,
+          path: string,
+          body?: unknown,
+          timeout?: number,
+        ) => Promise<unknown>,
+        application: string,
+      ): Promise<unknown>
+    }>(path)
+    expect(module).not.toBeNull()
+    if (!module) {
+      return
+    }
+
+    const calls: Array<{
+      method: string
+      path: string
+      body: unknown
+      timeout: number | undefined
+    }> = []
+    let statusAttempts = 0
+    const command = async (
+      method: string,
+      requestPath: string,
+      body?: unknown,
+      timeout?: number,
+    ) => {
+      calls.push({ method, path: requestPath, body, timeout })
+      if (requestPath === '/status' && statusAttempts++ === 0) {
+        throw new Error('driver is starting')
+      }
+      if (requestPath === '/session') {
+        return { value: { sessionId: 'session-1' } }
+      }
+      return { value: { ready: true } }
+    }
+
+    await module.waitForDriver(command, 1_000)
+    const session = await module.createSession(
+      command,
+      'target/release/yiyin.exe',
+    )
+
+    expect(session).toEqual({ value: { sessionId: 'session-1' } })
+    expect(calls.filter(({ path }) => path === '/status')).toHaveLength(2)
+    expect(calls.filter(({ path }) => path === '/session')).toHaveLength(1)
+    expect(calls.at(-1)).toMatchObject({
+      method: 'POST',
+      path: '/session',
+      timeout: 120_000,
     })
   })
 })

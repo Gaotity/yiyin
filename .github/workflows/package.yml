@@ -91,7 +91,14 @@ jobs:
           YIYIN_E2E_FIXTURE_DIR: ${{ runner.temp }}\yiyin-e2e-fixtures
         run: |
           $edgeDriver = (Get-Command msedgedriver.exe).Source
-          $driver = Start-Process -FilePath "$HOME\.cargo\bin\tauri-driver.exe" -ArgumentList @("--native-driver", $edgeDriver) -PassThru
+          $startOptions = @{
+            FilePath = "$HOME\.cargo\bin\tauri-driver.exe"
+            ArgumentList = @("--native-driver", $edgeDriver)
+            RedirectStandardOutput = "$env:RUNNER_TEMP\tauri-driver.stdout.log"
+            RedirectStandardError = "$env:RUNNER_TEMP\tauri-driver.stderr.log"
+            PassThru = $true
+          }
+          $driver = Start-Process @startOptions
           $driver.Id | Out-File "$env:RUNNER_TEMP\tauri-driver.pid"
       - name: Desktop W3C smoke
         run: pnpm smoke:w3c -- --application target/release/yiyin.exe
@@ -102,8 +109,44 @@ jobs:
           if (Test-Path "$env:RUNNER_TEMP\tauri-driver.pid") {
             Stop-Process -Id (Get-Content "$env:RUNNER_TEMP\tauri-driver.pid") -Force -ErrorAction SilentlyContinue
           }
+          Stop-Process -Name msedgedriver, yiyin -Force -ErrorAction SilentlyContinue
+          foreach ($path in @(
+            "$env:RUNNER_TEMP\tauri-driver.stdout.log",
+            "$env:RUNNER_TEMP\tauri-driver.stderr.log"
+          )) {
+            if (Test-Path $path) {
+              Write-Host "--- $path"
+              Get-Content $path
+            }
+          }
+          $diagnosticDirectory = "$env:RUNNER_TEMP\yiyin-app-logs"
+          New-Item -ItemType Directory -Force $diagnosticDirectory | Out-Null
+          foreach ($logDirectory in @(
+            "$env:LOCALAPPDATA\io.github.gaotity.yiyin\logs",
+            "$env:APPDATA\io.github.gaotity.yiyin\logs"
+          )) {
+            if (Test-Path $logDirectory) {
+              Copy-Item "$logDirectory\*" $diagnosticDirectory -Recurse -Force
+              Get-ChildItem $logDirectory -Recurse -File | ForEach-Object {
+                Write-Host "--- $($_.FullName)"
+                Get-Content $_.FullName
+              }
+            }
+          }
+      - name: Upload Windows smoke diagnostics
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: yiyin-windows-smoke-diagnostics
+          path: |
+            ${{ runner.temp }}/tauri-driver.stdout.log
+            ${{ runner.temp }}/tauri-driver.stderr.log
+            ${{ runner.temp }}/yiyin-app-logs
+          if-no-files-found: ignore
       - name: Upload unsigned Windows package
+        if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: yiyin-windows-unsigned
           path: target/release/bundle/nsis
+          if-no-files-found: ignore

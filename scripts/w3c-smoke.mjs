@@ -4,12 +4,12 @@ import { pathToFileURL } from 'node:url'
 const elementKey = 'element-6066-11e4-a52e-4f735466cecf'
 
 export function createW3cClient(baseUrl = 'http://127.0.0.1:4444') {
-  return async function command(method, path, body) {
+  return async function command(method, path, body, timeout = 30_000) {
     const response = await fetch(`${baseUrl}${path}`, {
       method,
       headers: { 'content-type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body),
-      signal: AbortSignal.timeout(30_000),
+      signal: AbortSignal.timeout(timeout),
     })
     const payload = await response.json()
     if (!response.ok || payload.value?.error) {
@@ -22,19 +22,34 @@ export function createW3cClient(baseUrl = 'http://127.0.0.1:4444') {
   }
 }
 
+export async function waitForDriver(command, timeout = 60_000) {
+  await waitFor(async () => {
+    const status = await command('GET', '/status', undefined, 5_000)
+    if (status.value?.ready !== true) {
+      throw new Error('tauri-driver is not ready')
+    }
+  }, timeout)
+}
+
+export function createSession(command, application) {
+  return command(
+    'POST',
+    '/session',
+    {
+      capabilities: {
+        alwaysMatch: {
+          'tauri:options': { application: resolve(application) },
+        },
+      },
+    },
+    120_000,
+  )
+}
+
 export async function runDesktopSmoke({ application, baseUrl }) {
   const command = createW3cClient(baseUrl)
-  const session = await waitFor(
-    () =>
-      command('POST', '/session', {
-        capabilities: {
-          alwaysMatch: {
-            'tauri:options': { application: resolve(application) },
-          },
-        },
-      }),
-    30_000,
-  )
+  await waitForDriver(command)
+  const session = await createSession(command, application)
   const sessionId = session.value.sessionId ?? session.sessionId
   if (!sessionId) {
     throw new Error('tauri-driver returned no session ID')

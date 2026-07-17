@@ -160,6 +160,23 @@ describe('GitHub automation policy', () => {
     expect(packaging).not.toContain('src-tauri/target/')
     expect(packaging).toContain('target/release/bundle/macos/壹印.app')
     expect(packaging).toContain('target/release/yiyin.exe')
+    for (const dependency of [
+      'libwebkit2gtk-4.1-dev',
+      'libayatana-appindicator3-dev',
+      'librsvg2-dev',
+      'libxdo-dev',
+      'libssl-dev',
+      'build-essential',
+    ]) {
+      expect(ci).toContain(dependency)
+    }
+    expect(packaging).toContain('RedirectStandardOutput')
+    expect(packaging).toContain('RedirectStandardError')
+    expect(packaging).toContain('Stop-Process -Name msedgedriver, yiyin')
+    expect(packaging).toContain('name: Upload Windows smoke diagnostics')
+    expect(packaging).toMatch(
+      /name: Upload unsigned Windows package\n\s+if: always\(\)/,
+    )
   })
 
   it('disables setup-node automatic package-manager caching before Corepack activation', () => {
