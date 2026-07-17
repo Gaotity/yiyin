@@ -83,6 +83,10 @@ button {
   box-shadow: var(--inset-shadow);
 }
 
+.settings-task-layout .task-list {
+  min-width: 0;
+}
+
 .task {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 80px 48px;
@@ -139,6 +143,7 @@ button {
 
 .dialog-backdrop {
   position: fixed;
+  z-index: 30;
   inset: 0;
   background: rgba(8, 30, 61, 0.2);
 }
@@ -146,6 +151,7 @@ button {
 .dialog-viewport,
 .drawer-viewport {
   position: fixed;
+  z-index: 31;
   inset: 0;
   display: grid;
   place-items: center;
@@ -197,9 +203,23 @@ button {
   box-shadow: var(--raised-shadow);
 }
 
+.select-popup-action {
+  width: 100%;
+  padding: 5px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
 .select-item {
   padding: 6px 8px;
   border-radius: 4px;
+  cursor: pointer;
+}
+
+.select-item-action {
+  margin-left: auto;
+  padding: 0 4px;
+  color: #df3030;
   cursor: pointer;
 }
 

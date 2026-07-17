@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use cosmic_text::{
     Attrs, Buffer, Color, Family, FontSystem, Metrics, Shaping, Style, SwashCache, Weight, Wrap,
@@ -22,7 +22,7 @@ pub struct RasterContext<'a> {
     pub background_height: u32,
     pub text_margin_percent: f64,
     pub default_family: &'a str,
-    pub bundled_font: &'a [u8],
+    pub bundled_fonts: &'a [Vec<u8>],
     pub resources: &'a ResourceRegistry,
 }
 
@@ -36,18 +36,9 @@ pub fn rasterize_rows(
             "forced text measurements do not match planned rows",
         ));
     }
-    let mut sources = vec![fontdb::Source::Binary(Arc::new(
-        context.bundled_font.to_vec(),
-    ))];
-    for resource in context.resources.snapshot() {
-        if resource.kind() == yiyin_domain::ResourceKind::Font {
-            let bytes = std::fs::read(resource.source())
-                .map_err(|error| ApplicationError::internal(error.to_string()))?;
-            sources.push(fontdb::Source::Binary(Arc::new(bytes)));
-        }
-    }
-    let mut font_system = FontSystem::new_with_fonts(sources);
+    let mut fonts = build_font_catalog(context.bundled_fonts, context.resources)?;
     let mut cache = SwashCache::new();
+
     let default_color = match context.background {
         BackgroundKind::Light => Rgba([0, 0, 0, 255]),
         BackgroundKind::Dark => Rgba([255, 255, 255, 255]),
@@ -64,7 +55,8 @@ pub fn rasterize_rows(
                 context.default_family,
                 default_color,
                 context.resources,
-                &mut font_system,
+                &fonts.aliases,
+                &mut fonts.system,
                 &mut cache,
             )?;
             if let Some(measurement) = forced_measurements.get(index).copied() {
@@ -88,6 +80,54 @@ pub fn rasterize_rows(
         .collect()
 }
 
+struct FontCatalog {
+    system: FontSystem,
+    aliases: HashMap<String, String>,
+}
+
+fn build_font_catalog(
+    bundled_fonts: &[Vec<u8>],
+    resources: &ResourceRegistry,
+) -> Result<FontCatalog, ApplicationError> {
+    let mut sources = bundled_fonts
+        .iter()
+        .cloned()
+        .map(|bytes| fontdb::Source::Binary(Arc::new(bytes)))
+        .collect::<Vec<_>>();
+    let mut aliases = HashMap::from([
+        ("春风楷".to_owned(), "Slidechunfeng".to_owned()),
+        ("千图小兔".to_owned(), "QTxiaotu".to_owned()),
+        (
+            "FrederickatheGreat".to_owned(),
+            "Fredericka the Great".to_owned(),
+        ),
+    ]);
+    for resource in resources.snapshot() {
+        if resource.kind() == yiyin_domain::ResourceKind::Font {
+            let bytes = std::fs::read(resource.source())
+                .map_err(|error| ApplicationError::internal(error.to_string()))?;
+            if let Some(family) = embedded_family(&bytes) {
+                aliases.insert(resource.display_name().to_owned(), family);
+            }
+            sources.push(fontdb::Source::Binary(Arc::new(bytes)));
+        }
+    }
+    Ok(FontCatalog {
+        system: FontSystem::new_with_fonts(sources),
+        aliases,
+    })
+}
+
+fn embedded_family(bytes: &[u8]) -> Option<String> {
+    let mut database = fontdb::Database::new();
+    database.load_font_data(bytes.to_vec());
+    database
+        .faces()
+        .next()
+        .and_then(|face| face.families.first())
+        .map(|(name, _)| name.clone())
+}
+
 #[allow(
     clippy::cast_possible_truncation,
     clippy::too_many_arguments,
@@ -100,6 +140,7 @@ fn rasterize_row(
     default_family: &str,
     default_color: Rgba<u8>,
     resources: &ResourceRegistry,
+    aliases: &HashMap<String, String>,
     font_system: &mut FontSystem,
     cache: &mut SwashCache,
 ) -> Result<RgbaImage, ApplicationError> {
@@ -112,6 +153,7 @@ fn rasterize_row(
                 background_height,
                 default_family,
                 default_color,
+                aliases,
                 font_system,
                 cache,
             )?),
@@ -171,6 +213,7 @@ fn rasterize_text(
     background_height: u32,
     default_family: &str,
     default_color: Rgba<u8>,
+    aliases: &HashMap<String, String>,
     font_system: &mut FontSystem,
     cache: &mut SwashCache,
 ) -> Result<RgbaImage, ApplicationError> {
@@ -188,6 +231,7 @@ fn rasterize_text(
     } else {
         font.family()
     };
+    let family = aliases.get(family).map_or(family, String::as_str);
     let color = parse_color(font.color()).unwrap_or(default_color);
     let mut attrs = Attrs::new()
         .family(Family::Name(family))
@@ -271,5 +315,65 @@ fn checked_dimension(value: f64) -> Result<u32, ApplicationError> {
         Err(ApplicationError::internal("invalid text surface size"))
     } else {
         Ok(value.ceil() as u32)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn loads_every_bundled_font_family() {
+        let directory = tempfile::tempdir().expect("create resource directory");
+        let resources = ResourceRegistry::new(directory.path()).expect("create resources");
+        let bundled_fonts = vec![
+            include_bytes!("../../../../web/assets/font/春风楷.ttf").to_vec(),
+            include_bytes!("../../../../web/assets/font/千图小兔体.ttf").to_vec(),
+            include_bytes!("../../../../web/assets/font/FrederickatheGreat.ttf").to_vec(),
+            include_bytes!("../../../../web/assets/font/Neoneon.otf").to_vec(),
+        ];
+
+        let catalog = build_font_catalog(&bundled_fonts, &resources).expect("load fonts");
+        let families = catalog
+            .system
+            .db()
+            .faces()
+            .flat_map(|face| face.families.iter().map(|(name, _)| name.as_str()))
+            .collect::<Vec<_>>();
+
+        assert!(families.contains(&"Slidechunfeng"));
+        assert!(families.contains(&"QTxiaotu"));
+        assert!(families.contains(&"Fredericka the Great"), "{families:?}");
+        assert!(families.contains(&"Neoneon"), "{families:?}");
+        assert_eq!(catalog.aliases["春风楷"], "Slidechunfeng");
+        assert_eq!(catalog.aliases["千图小兔"], "QTxiaotu");
+        assert_eq!(
+            catalog.aliases["FrederickatheGreat"],
+            "Fredericka the Great"
+        );
+    }
+
+    #[test]
+    fn maps_a_custom_display_name_to_its_embedded_family() {
+        let directory = tempfile::tempdir().expect("create resource directory");
+        let source = directory.path().join("custom.otf");
+        std::fs::write(
+            &source,
+            include_bytes!("../../../../web/assets/font/Neoneon.otf"),
+        )
+        .expect("write custom font");
+        let resources =
+            ResourceRegistry::new(directory.path().join("owned")).expect("create resources");
+        resources
+            .register_owned(yiyin_domain::ResourceKind::Font, &source, "My Neon")
+            .expect("register custom font");
+
+        let catalog = build_font_catalog(
+            &[include_bytes!("../../../../web/assets/font/千图小兔体.ttf").to_vec()],
+            &resources,
+        )
+        .expect("load fonts");
+
+        assert_eq!(catalog.aliases["My Neon"], "Neoneon");
     }
 }

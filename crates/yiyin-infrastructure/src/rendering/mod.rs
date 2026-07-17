@@ -26,7 +26,7 @@ pub struct RustImageRenderer {
     resources: Arc<ResourceRegistry>,
     output_root: Arc<RwLock<PathBuf>>,
     preview_root: PathBuf,
-    bundled_font: Vec<u8>,
+    bundled_fonts: Vec<Vec<u8>>,
     filesystem: Arc<dyn FileSystem>,
 }
 
@@ -42,11 +42,12 @@ impl RustImageRenderer {
         preview_root: PathBuf,
         bundled_font: impl AsRef<Path>,
     ) -> Result<Self, ApplicationError> {
-        Self::with_filesystem(
+        let bundled_fonts = [bundled_font.as_ref().to_path_buf()];
+        Self::with_filesystem_and_bundled_fonts(
             resources,
             Arc::new(RwLock::new(output_root)),
             preview_root,
-            bundled_font.as_ref(),
+            &bundled_fonts,
             Arc::new(StdFileSystem),
         )
     }
@@ -62,11 +63,32 @@ impl RustImageRenderer {
         preview_root: PathBuf,
         bundled_font: impl AsRef<Path>,
     ) -> Result<Self, ApplicationError> {
-        Self::with_filesystem(
+        let bundled_fonts = [bundled_font.as_ref().to_path_buf()];
+        Self::with_filesystem_and_bundled_fonts(
             resources,
             output_root,
             preview_root,
-            bundled_font.as_ref(),
+            &bundled_fonts,
+            Arc::new(StdFileSystem),
+        )
+    }
+
+    /// Creates a renderer with every bundled product font and a shared export root.
+    ///
+    /// # Errors
+    ///
+    /// Returns `INTERNAL` when its roots or bundled fonts cannot be read.
+    pub fn with_shared_output_root_and_bundled_fonts(
+        resources: Arc<ResourceRegistry>,
+        output_root: Arc<RwLock<PathBuf>>,
+        preview_root: PathBuf,
+        bundled_fonts: &[PathBuf],
+    ) -> Result<Self, ApplicationError> {
+        Self::with_filesystem_and_bundled_fonts(
+            resources,
+            output_root,
+            preview_root,
+            bundled_fonts,
             Arc::new(StdFileSystem),
         )
     }
@@ -83,6 +105,27 @@ impl RustImageRenderer {
         bundled_font: &Path,
         filesystem: Arc<dyn FileSystem>,
     ) -> Result<Self, ApplicationError> {
+        Self::with_filesystem_and_bundled_fonts(
+            resources,
+            output_root,
+            preview_root,
+            &[bundled_font.to_path_buf()],
+            filesystem,
+        )
+    }
+
+    fn with_filesystem_and_bundled_fonts(
+        resources: Arc<ResourceRegistry>,
+        output_root: Arc<RwLock<PathBuf>>,
+        preview_root: PathBuf,
+        bundled_fonts: &[PathBuf],
+        filesystem: Arc<dyn FileSystem>,
+    ) -> Result<Self, ApplicationError> {
+        if bundled_fonts.is_empty() {
+            return Err(ApplicationError::internal(
+                "at least one bundled font is required",
+            ));
+        }
         let initial_output_root = output_root
             .read()
             .map_err(|_| ApplicationError::internal("output root lock poisoned"))?
@@ -93,12 +136,15 @@ impl RustImageRenderer {
         filesystem
             .create_dir_all(&preview_root)
             .map_err(internal_io)?;
-        let bundled_font = filesystem.read(bundled_font).map_err(internal_io)?;
+        let bundled_fonts = bundled_fonts
+            .iter()
+            .map(|font| filesystem.read(font).map_err(internal_io))
+            .collect::<Result<Vec<_>, _>>()?;
         Ok(Self {
             resources,
             output_root,
             preview_root,
-            bundled_font,
+            bundled_fonts,
             filesystem,
         })
     }
@@ -159,7 +205,7 @@ impl RustImageRenderer {
             background_height: initial_plan.canvas.height,
             text_margin_percent: request.options().text_margin.get(),
             default_family: request.options().font.as_str(),
-            bundled_font: &self.bundled_font,
+            bundled_fonts: &self.bundled_fonts,
             resources: self.resources.as_ref(),
         };
         let rendered_rows = text::rasterize_rows(&rows, &text_context, request.text_rows())?;

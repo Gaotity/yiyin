@@ -87,20 +87,15 @@ impl AppState {
         let output = Arc::new(NativeOutputDirectory::new(output_root)?);
         let resources = compose_resources(&resource_root)?;
 
-        let bundled_font = app_data.join("bundled-font.ttf");
-        if !bundled_font.exists() {
-            fs::write(
-                &bundled_font,
-                include_bytes!("../../web/assets/font/千图小兔体.ttf"),
-            )
-            .map_err(internal_io)?;
-        }
-        let renderer = Arc::new(RustImageRenderer::with_shared_output_root(
-            Arc::clone(&resources),
-            output.shared_root(),
-            app_cache.join("previews"),
-            bundled_font,
-        )?);
+        let bundled_fonts = write_bundled_fonts(&app_data.join("bundled-fonts"))?;
+        let renderer = Arc::new(
+            RustImageRenderer::with_shared_output_root_and_bundled_fonts(
+                Arc::clone(&resources),
+                output.shared_root(),
+                app_cache.join("previews"),
+                &bundled_fonts,
+            )?,
+        );
         let events = Arc::new(TauriTaskEventSink::new(app.clone()));
         let tasks: Arc<dyn TaskQueue> = Arc::new(TokioTaskQueue::new(renderer, events)?);
         let resource_repository: Arc<dyn ResourceRepository> = resources.clone();
@@ -201,6 +196,59 @@ fn register_bundled_image(
     Ok(())
 }
 
+fn write_bundled_fonts(root: &Path) -> Result<Vec<PathBuf>, yiyin_application::ApplicationError> {
+    [
+        (
+            "chunfengkai.ttf",
+            include_bytes!("../../web/assets/font/春风楷.ttf").as_slice(),
+        ),
+        (
+            "qiantuxiaotu.ttf",
+            include_bytes!("../../web/assets/font/千图小兔体.ttf").as_slice(),
+        ),
+        (
+            "frederickathegreat.ttf",
+            include_bytes!("../../web/assets/font/FrederickatheGreat.ttf").as_slice(),
+        ),
+        (
+            "neoneon.otf",
+            include_bytes!("../../web/assets/font/Neoneon.otf").as_slice(),
+        ),
+    ]
+    .into_iter()
+    .map(|(name, contents)| write_bundled_font(root, name, contents))
+    .collect()
+}
+
+fn write_bundled_font(
+    root: &Path,
+    name: &str,
+    contents: &[u8],
+) -> Result<PathBuf, yiyin_application::ApplicationError> {
+    fs::create_dir_all(root).map_err(internal_io)?;
+    let destination = root.join(name);
+    if fs::read(&destination).map_or(true, |current| current != contents) {
+        fs::write(&destination, contents).map_err(internal_io)?;
+    }
+    Ok(destination)
+}
+
 fn internal_io(error: std::io::Error) -> yiyin_application::ApplicationError {
     yiyin_application::ApplicationError::internal(error.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn writes_every_bundled_font_into_rust_owned_storage() {
+        let directory = tempfile::tempdir().expect("create app data");
+
+        let paths = write_bundled_fonts(directory.path()).expect("write bundled fonts");
+
+        assert_eq!(paths.len(), 4);
+        assert!(paths.iter().all(|path| path.starts_with(directory.path())));
+        assert!(paths.iter().all(|path| fs::metadata(path).is_ok()));
+    }
 }

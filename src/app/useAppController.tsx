@@ -4,6 +4,7 @@ import type {
   BootstrapDto,
   CommandErrorDto,
   PublicConfigDto,
+  ResourceDescriptorDto,
   TaskDescriptorDto,
   TaskStatusEventDto,
 } from '../platform/types'
@@ -25,6 +26,8 @@ type AppAction =
   | { type: 'task-status'; event: TaskStatusEventDto }
   | { type: 'tasks-replaced'; tasks: TaskDescriptorDto[] }
   | { type: 'config-replaced'; config: PublicConfigDto }
+  | { type: 'resource-upserted'; resource: ResourceDescriptorDto }
+  | { type: 'fonts-replaced'; fonts: ResourceDescriptorDto[] }
   | { type: 'selected'; id: string | null }
 
 const initialState: AppState = {
@@ -103,8 +106,26 @@ export function useAppController(client: PlatformClient) {
     },
     clearTasks: async () => replaceTasks(await client.clearTasks()),
     resetConfig: async () => replaceConfig(await client.resetConfig()),
-    updateConfig: async (config: PublicConfigDto) =>
-      replaceConfig(await client.updateConfig({ config })),
+    updateConfig: async (config: PublicConfigDto) => {
+      const canonical = await client.updateConfig({ config })
+      replaceConfig(canonical)
+      return canonical
+    },
+    registerFont: async (name: string) => {
+      const resource = await client.registerFont(name)
+      dispatch({ type: 'resource-upserted', resource })
+      return resource
+    },
+    removeFont: async (id: string) => {
+      const fonts = await client.removeFont(id)
+      dispatch({ type: 'fonts-replaced', fonts })
+      return fonts
+    },
+    registerOverlay: async () => {
+      const resource = await client.registerOverlay()
+      dispatch({ type: 'resource-upserted', resource })
+      return resource
+    },
   }
 }
 
@@ -167,6 +188,36 @@ function reducer(state: AppState, action: AppAction): AppState {
     case 'config-replaced':
       return state.snapshot
         ? { ...state, snapshot: { ...state.snapshot, config: action.config } }
+        : state
+    case 'resource-upserted':
+      return state.snapshot
+        ? {
+            ...state,
+            snapshot: {
+              ...state.snapshot,
+              resources: [
+                ...state.snapshot.resources.filter(
+                  (resource) => resource.id !== action.resource.id,
+                ),
+                action.resource,
+              ],
+            },
+          }
+        : state
+    case 'fonts-replaced':
+      return state.snapshot
+        ? {
+            ...state,
+            snapshot: {
+              ...state.snapshot,
+              resources: [
+                ...state.snapshot.resources.filter(
+                  (resource) => resource.kind !== 'font',
+                ),
+                ...action.fonts,
+              ],
+            },
+          }
         : state
     case 'selected':
       return {

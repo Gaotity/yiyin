@@ -1,16 +1,18 @@
-import { Select } from '../../components/Select'
 import type {
   ExternalDestinationDto,
   PublicConfigDto,
   ResourceDescriptorDto,
 } from '../../platform/types'
+import { FontSelect } from '../settings/FontSelect'
 import { FeedbackPopover } from './FeedbackPopover'
 import { HelpPopover } from './HelpPopover'
 
 interface TitleBarProps {
   config: PublicConfigDto
   resources: ResourceDescriptorDto[]
-  onFontChange(font: string): void
+  onFontChange(font: string): Promise<unknown>
+  onRegisterFont(name: string): Promise<ResourceDescriptorDto>
+  onRemoveFont(id: string): Promise<ResourceDescriptorDto[]>
   onReset(): void
   onMinimize(): void
   onClose(): void
@@ -21,18 +23,13 @@ export function TitleBar({
   config,
   resources,
   onFontChange,
+  onRegisterFont,
+  onRemoveFont,
   onReset,
   onMinimize,
   onClose,
   onOpen,
 }: TitleBarProps) {
-  const fonts = [
-    config.options.font,
-    ...resources
-      .filter((resource) => resource.kind === 'font')
-      .map((resource) => resource.displayName),
-  ].filter((font, index, values) => values.indexOf(font) === index)
-
   return (
     <header className="title-bar" data-tauri-drag-region>
       <div className="title-bar-left">
@@ -40,11 +37,12 @@ export function TitleBar({
         <HelpPopover />
       </div>
       <div className="title-bar-right">
-        <Select
+        <FontSelect
           value={config.options.font}
-          onValueChange={onFontChange}
-          label="字体"
-          options={fonts.map((font) => ({ value: font, label: font }))}
+          resources={resources}
+          onChange={onFontChange}
+          onRegister={onRegisterFont}
+          onRemove={onRemoveFont}
         />
         <button
           type="button"
