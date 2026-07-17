@@ -3,7 +3,11 @@
     reason = "I/O errors are consumed by map_err adapter functions"
 )]
 
-use std::{fs, path::PathBuf, sync::Arc};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use tauri::{AppHandle, Manager, Wry};
 use yiyin_application::{
@@ -81,7 +85,7 @@ impl AppState {
         let config = config_repository.load()?;
         let output_root = resolve_output_root(app, &config.output)?;
         let output = Arc::new(NativeOutputDirectory::new(output_root)?);
-        let resources = Arc::new(ResourceRegistry::new(resource_root)?);
+        let resources = compose_resources(&resource_root)?;
 
         let bundled_font = app_data.join("bundled-font.ttf");
         if !bundled_font.exists() {
@@ -160,6 +164,41 @@ fn resolve_output_root(
         .home_dir()
         .map_err(|error| yiyin_application::ApplicationError::internal(error.to_string()))?;
     Ok(home.join(configured))
+}
+
+fn compose_resources(
+    resource_root: &Path,
+) -> Result<Arc<ResourceRegistry>, yiyin_application::ApplicationError> {
+    let resources = Arc::new(ResourceRegistry::new(resource_root)?);
+    register_bundled_image(
+        resources.as_ref(),
+        resource_root,
+        "zs-wx.jpg",
+        include_bytes!("../../web/public/zs-wx.jpg"),
+    )?;
+    register_bundled_image(
+        resources.as_ref(),
+        resource_root,
+        "zs-zfb.jpg",
+        include_bytes!("../../web/public/zs-zfb.jpg"),
+    )?;
+    Ok(resources)
+}
+
+fn register_bundled_image(
+    resources: &ResourceRegistry,
+    resource_root: &Path,
+    name: &str,
+    contents: &[u8],
+) -> Result<(), yiyin_application::ApplicationError> {
+    let directory = resource_root.join("bundled");
+    fs::create_dir_all(&directory).map_err(internal_io)?;
+    let destination = directory.join(name);
+    if fs::read(&destination).map_or(true, |current| current != contents) {
+        fs::write(&destination, contents).map_err(internal_io)?;
+    }
+    resources.register_bundled(&destination, name)?;
+    Ok(())
 }
 
 fn internal_io(error: std::io::Error) -> yiyin_application::ApplicationError {

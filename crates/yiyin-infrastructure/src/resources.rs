@@ -107,6 +107,32 @@ impl ResourceRegistry {
         self.insert(record)
     }
 
+    /// Registers an image that the Rust composition root placed in application-owned storage.
+    ///
+    /// # Errors
+    ///
+    /// Returns `FORBIDDEN` when the source is outside the registry's owned root and stable file
+    /// errors for missing or invalid image bytes.
+    pub fn register_bundled(
+        &self,
+        source: &Path,
+        display_name: &str,
+    ) -> Result<ResourceRecord, ApplicationError> {
+        let (canonical, inspected) = self.inspect_source(source, ResourceKind::BundledAsset)?;
+        if !canonical.starts_with(&self.owned_root) {
+            return Err(ApplicationError::forbidden());
+        }
+        let record = build_record(
+            self.next_resource_id(),
+            ResourceKind::BundledAsset,
+            display_name,
+            canonical,
+            &inspected,
+            self.owned_root.clone(),
+        );
+        self.insert(record)
+    }
+
     fn inspect_source(
         &self,
         source: &Path,
@@ -442,11 +468,11 @@ fn inspect_file(
 ) -> Result<InspectedFile, ApplicationError> {
     match kind {
         ResourceKind::Input
+        | ResourceKind::BundledAsset
         | ResourceKind::Overlay
         | ResourceKind::Output
         | ResourceKind::Preview => inspect_image(bytes, path),
         ResourceKind::Font => inspect_font(bytes, path),
-        ResourceKind::BundledAsset => Err(ApplicationError::forbidden()),
     }
 }
 

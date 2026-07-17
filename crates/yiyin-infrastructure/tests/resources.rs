@@ -202,6 +202,31 @@ fn persisted_resource_manifest_rejects_parent_traversal() {
 }
 
 #[test]
+fn bundled_assets_must_live_under_rust_owned_storage() {
+    let harness = Harness::new();
+    let bundled_root = harness.registry.owned_root().join("bundled");
+    fs::create_dir_all(&bundled_root).expect("bundled root");
+    let bundled = bundled_root.join("donation.jpg");
+    fs::copy(fixtures().join("landscape-default.jpg"), &bundled).expect("bundled fixture");
+    let external = harness.copy_fixture("landscape-default.jpg", "external.jpg");
+
+    let record = harness
+        .registry
+        .register_bundled(&bundled, "zs-wx.jpg")
+        .expect("register bundled asset");
+    assert_eq!(record.kind(), ResourceKind::BundledAsset);
+    assert_eq!(record.display_name(), "zs-wx.jpg");
+    assert_eq!(
+        harness
+            .registry
+            .register_bundled(&external, "external.jpg")
+            .unwrap_err()
+            .code(),
+        ErrorCode::Forbidden
+    );
+}
+
+#[test]
 fn deleted_sources_and_unknown_ids_return_stable_errors() {
     let harness = Harness::new();
     let source = harness.copy_fixture("landscape-default.jpg", "photo.jpg");

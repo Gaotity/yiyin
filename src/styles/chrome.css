@@ -1,0 +1,131 @@
+.title-bar {
+  display: flex;
+  flex: 0 0 62px;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 10px 10px 20px;
+  -webkit-app-region: drag;
+}
+
+.title-bar-left,
+.title-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  -webkit-app-region: no-drag;
+}
+
+.icon-button {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 8px;
+  background: var(--background);
+  box-shadow: var(--raised-shadow);
+  cursor: pointer;
+  place-items: center;
+}
+
+.icon-button:hover {
+  box-shadow: var(--inset-shadow);
+}
+
+.popover-positioner {
+  z-index: 20;
+}
+
+.popover-surface {
+  max-height: min(440px, calc(100vh - 90px));
+  padding: 12px;
+  overflow: auto;
+  border-radius: 8px;
+  color: var(--text-color);
+  background: var(--background);
+  box-shadow: var(--raised-shadow);
+  transform-origin: var(--transform-origin);
+}
+
+.popover-heading {
+  margin: 0 0 10px;
+  font-weight: 700;
+}
+
+.help-popover {
+  width: 300px;
+}
+
+.help-list details {
+  padding: 8px 0;
+}
+
+.help-list summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.help-body {
+  margin-top: 8px;
+}
+
+.help-body p {
+  margin: 8px 0 0;
+  color: var(--text-muted);
+  line-height: 1.6;
+  text-align: justify;
+}
+
+.feedback-popover {
+  display: flex;
+  width: 360px;
+  flex-direction: column;
+  gap: 10px;
+  text-align: center;
+}
+
+.popover-action {
+  padding: 10px;
+  border-radius: 6px;
+  background: var(--background);
+  box-shadow: var(--raised-shadow);
+  cursor: pointer;
+}
+
+.donation-codes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.donation-codes figure {
+  margin: 0;
+}
+
+.donation-codes img {
+  display: block;
+  width: 100%;
+  margin-bottom: 8px;
+  border-radius: 4px;
+  box-shadow: var(--raised-shadow);
+}
+
+.app-footer {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px 0;
+  color: #8f9094;
+}
+
+.app-footer button {
+  padding: 2px;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+
+.app-footer button:hover {
+  color: var(--active-color);
+  text-decoration: underline;
+}

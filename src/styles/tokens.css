@@ -1,0 +1,13 @@
+:root {
+  --text-color: #081e3d;
+  --text-muted: rgba(16, 33, 55, 0.75);
+  --active-color: rgba(19, 50, 94, 0.73);
+  --background: #e7eaf3;
+  --shadow-dark: rgba(191, 202, 219, 0.8);
+  --shadow-light: rgba(255, 255, 255, 0.8);
+  --success-color: #529e4e;
+  --error-color: #ba4848;
+  --raised-shadow: -3px -3px 6px var(--shadow-light), 3px 3px 6px var(--shadow-dark);
+  --inset-shadow: inset -3px -3px 6px var(--shadow-light),
+    inset 3px 3px 6px var(--shadow-dark);
+}
