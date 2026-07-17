@@ -25,6 +25,9 @@
     "build": "vite build",
     "tauri": "tauri",
     "audit": "pnpm audit --audit-level high",
+    "check:release-age": "node scripts/check-release-age.mjs",
+    "verify:bundle": "node scripts/verify-bundle.mjs",
+    "smoke:w3c": "node scripts/w3c-smoke.mjs",
     "ci": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
   },
   "dependencies": {

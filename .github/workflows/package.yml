@@ -1,0 +1,107 @@
+name: Native packages
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: 24.x
+  PNPM_VERSION: 11.13.0
+  RUST_TOOLCHAIN: 1.97.0
+  CARGO_DENY_VERSION: 0.20.2
+  TAURI_DRIVER_VERSION: 2.0.6
+
+jobs:
+  macos-package-smoke:
+    name: macOS package smoke
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Enable pinned pnpm
+        run: corepack enable && corepack prepare pnpm@11.13.0 --activate
+      - name: Install pinned Rust
+        run: |
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal
+          rustup default "$RUST_TOOLCHAIN"
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build unsigned package
+        run: pnpm tauri build --bundles app,dmg
+      - name: Verify package contents
+        run: pnpm verify:bundle -- --platform macos --artifact "src-tauri/target/release/bundle/macos/壹印.app"
+      - name: Launch smoke
+        run: |
+          executable="$(find "src-tauri/target/release/bundle/macos/壹印.app/Contents/MacOS" -type f -perm +111 | head -n 1)"
+          "$executable" &
+          app_pid=$!
+          sleep 5
+          kill -0 "$app_pid"
+          kill "$app_pid"
+          wait "$app_pid" || true
+      - name: Upload unsigned macOS packages
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: yiyin-macos-unsigned
+          path: |
+            src-tauri/target/release/bundle/macos
+            src-tauri/target/release/bundle/dmg
+
+  windows-package-and-desktop-smoke:
+    name: Windows package and desktop smoke
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Enable pinned pnpm
+        run: corepack enable && corepack prepare pnpm@11.13.0 --activate
+      - name: Install pinned Rust
+        shell: bash
+        run: |
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal
+          rustup default "$RUST_TOOLCHAIN"
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build unsigned production package
+        run: pnpm tauri build --bundles nsis
+      - name: Verify production package contents
+        run: pnpm verify:bundle -- --platform windows --artifact src-tauri/target/release/bundle
+      - name: Install pinned tauri-driver
+        shell: bash
+        run: cargo install tauri-driver --locked --version "$TAURI_DRIVER_VERSION"
+      - name: Build compile-time fixture binary
+        run: cargo build -p yiyin-desktop --release --locked --features e2e-fixture
+      - name: Prepare one CI fixture
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force "$env:RUNNER_TEMP\yiyin-e2e-fixtures"
+          Copy-Item "tests\fixtures\input\portrait-default.png" "$env:RUNNER_TEMP\yiyin-e2e-fixtures\portrait-default.png"
+      - name: Start tauri-driver
+        shell: pwsh
+        env:
+          YIYIN_E2E_FIXTURE_DIR: ${{ runner.temp }}\yiyin-e2e-fixtures
+        run: |
+          $edgeDriver = (Get-Command msedgedriver.exe).Source
+          $driver = Start-Process -FilePath "$HOME\.cargo\bin\tauri-driver.exe" -ArgumentList @("--native-driver", $edgeDriver) -PassThru
+          $driver.Id | Out-File "$env:RUNNER_TEMP\tauri-driver.pid"
+      - name: Desktop W3C smoke
+        run: pnpm smoke:w3c -- --application src-tauri/target/release/yiyin.exe
+      - name: Stop tauri-driver
+        if: always()
+        shell: pwsh
+        run: |
+          if (Test-Path "$env:RUNNER_TEMP\tauri-driver.pid") {
+            Stop-Process -Id (Get-Content "$env:RUNNER_TEMP\tauri-driver.pid") -Force -ErrorAction SilentlyContinue
+          }
+      - name: Upload unsigned Windows package
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: yiyin-windows-unsigned
+          path: src-tauri/target/release/bundle/nsis

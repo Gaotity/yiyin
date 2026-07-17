@@ -64,6 +64,8 @@ pub fn builder() -> tauri::Builder<Wry> {
         ])
         .setup(|app| {
             let state = AppState::compose(app.handle())?;
+            #[cfg(feature = "e2e-fixture")]
+            crate::e2e::seed_registered_images(&state)?;
             app.manage(state);
             if let Some(window) = app.get_webview_window("main") {
                 let handle = app.handle().clone();

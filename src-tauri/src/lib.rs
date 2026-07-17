@@ -5,6 +5,8 @@
 pub mod app;
 pub mod commands;
 pub mod dto;
+#[cfg(feature = "e2e-fixture")]
+mod e2e;
 pub mod error;
 pub mod events;
 pub mod native;
