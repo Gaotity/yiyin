@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main",
+  "description": "The main Yiyin window can invoke only application-owned commands.",
+  "windows": ["main"],
+  "permissions": []
+}

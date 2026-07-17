@@ -143,6 +143,65 @@ fn owned_font_and_overlay_survive_source_deletion() {
 }
 
 #[test]
+fn owned_font_and_overlay_survive_registry_restart() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let inputs = temp.path().join("inputs");
+    let owned = temp.path().join("owned");
+    fs::create_dir_all(&inputs).expect("input root");
+    let font = inputs.join("font.ttf");
+    let overlay = inputs.join("overlay.png");
+    fs::copy(fixtures().join("千图小兔体.ttf"), &font).expect("font fixture");
+    fs::copy(fixtures().join("portrait-default.png"), &overlay).expect("overlay fixture");
+
+    let (font_id, overlay_id) = {
+        let registry = ResourceRegistry::new(&owned).expect("resource registry");
+        let font = registry
+            .register_owned(ResourceKind::Font, &font, "Body")
+            .expect("register font");
+        let overlay = registry
+            .register_owned(ResourceKind::Overlay, &overlay, "Frame")
+            .expect("register overlay");
+        (font.id().clone(), overlay.id().clone())
+    };
+
+    let restarted = ResourceRegistry::new(&owned).expect("restart registry");
+    let font = restarted.resolve(&font_id).expect("reload font");
+    let overlay = restarted.resolve(&overlay_id).expect("reload overlay");
+    assert_eq!(font.display_name(), "Body");
+    assert_eq!(font.kind(), ResourceKind::Font);
+    assert_eq!(overlay.display_name(), "Frame");
+    assert_eq!(overlay.kind(), ResourceKind::Overlay);
+}
+
+#[test]
+fn persisted_resource_manifest_rejects_parent_traversal() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let owned = temp.path().join("owned");
+    fs::create_dir_all(&owned).expect("owned root");
+    fs::write(
+        owned.join("resources.json"),
+        r#"{
+  "version": 1,
+  "resources": [{
+    "id": "escaped",
+    "kind": "font",
+    "display_name": "Escaped",
+    "relative_path": "../outside.ttf"
+  }]
+}"#,
+    )
+    .expect("malicious manifest");
+
+    assert_eq!(
+        ResourceRegistry::new(&owned)
+            .err()
+            .expect("parent traversal is rejected")
+            .code(),
+        ErrorCode::Forbidden
+    );
+}
+
+#[test]
 fn deleted_sources_and_unknown_ids_return_stable_errors() {
     let harness = Harness::new();
     let source = harness.copy_fixture("landscape-default.jpg", "photo.jpg");

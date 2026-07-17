@@ -5,7 +5,7 @@ mod text;
 use std::{
     ffi::OsString,
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{Arc, RwLock},
 };
 
 use image::{DynamicImage, ImageEncoder, RgbaImage, codecs::jpeg::JpegEncoder};
@@ -24,7 +24,7 @@ use crate::{
 
 pub struct RustImageRenderer {
     resources: Arc<ResourceRegistry>,
-    output_root: PathBuf,
+    output_root: Arc<RwLock<PathBuf>>,
     preview_root: PathBuf,
     bundled_font: Vec<u8>,
     filesystem: Arc<dyn FileSystem>,
@@ -44,6 +44,26 @@ impl RustImageRenderer {
     ) -> Result<Self, ApplicationError> {
         Self::with_filesystem(
             resources,
+            Arc::new(RwLock::new(output_root)),
+            preview_root,
+            bundled_font.as_ref(),
+            Arc::new(StdFileSystem),
+        )
+    }
+
+    /// Creates a renderer whose export root can be changed by the native adapter.
+    ///
+    /// # Errors
+    ///
+    /// Returns `INTERNAL` when its roots or deterministic font cannot be read.
+    pub fn with_shared_output_root(
+        resources: Arc<ResourceRegistry>,
+        output_root: Arc<RwLock<PathBuf>>,
+        preview_root: PathBuf,
+        bundled_font: impl AsRef<Path>,
+    ) -> Result<Self, ApplicationError> {
+        Self::with_filesystem(
+            resources,
             output_root,
             preview_root,
             bundled_font.as_ref(),
@@ -58,13 +78,17 @@ impl RustImageRenderer {
     /// Returns `INTERNAL` when its roots or deterministic font cannot be read.
     pub fn with_filesystem(
         resources: Arc<ResourceRegistry>,
-        output_root: PathBuf,
+        output_root: Arc<RwLock<PathBuf>>,
         preview_root: PathBuf,
         bundled_font: &Path,
         filesystem: Arc<dyn FileSystem>,
     ) -> Result<Self, ApplicationError> {
+        let initial_output_root = output_root
+            .read()
+            .map_err(|_| ApplicationError::internal("output root lock poisoned"))?
+            .clone();
         filesystem
-            .create_dir_all(&output_root)
+            .create_dir_all(&initial_output_root)
             .map_err(internal_io)?;
         filesystem
             .create_dir_all(&preview_root)
@@ -191,10 +215,20 @@ impl RustImageRenderer {
                     .join(format!("{}.jpg", request.task_id().as_str())),
             )
         } else {
-            (
-                ResourceKind::Output,
-                self.output_root.join(request.output_name()),
-            )
+            {
+                let output_root = self
+                    .output_root
+                    .read()
+                    .map_err(|_| ApplicationError::internal("output root lock poisoned"))?
+                    .clone();
+                self.filesystem
+                    .create_dir_all(&output_root)
+                    .map_err(internal_io)?;
+                (
+                    ResourceKind::Output,
+                    output_root.join(request.output_name()),
+                )
+            }
         };
         if !request.is_preview() && self.filesystem.exists(&destination) {
             return Err(ApplicationError::invalid_request(

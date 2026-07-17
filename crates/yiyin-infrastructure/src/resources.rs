@@ -6,6 +6,7 @@ use std::{
 };
 
 use image::GenericImageView;
+use serde::{Deserialize, Serialize};
 use yiyin_application::{
     ApplicationError, IdGenerator, MetadataReader, ResourceRecord, ResourceRepository,
 };
@@ -14,6 +15,24 @@ use yiyin_domain::{
 };
 
 use crate::{DirectoryEntryKind, ExifMetadataReader, FileSystem, StdFileSystem};
+
+const RESOURCE_MANIFEST: &str = "resources.json";
+const LEGACY_RESOURCE_MANIFEST: &str = "legacy-resources.json";
+const RESOURCE_MANIFEST_VERSION: u32 = 1;
+
+#[derive(Debug, Deserialize, Serialize)]
+struct ResourceManifest {
+    version: u32,
+    resources: Vec<ResourceManifestEntry>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct ResourceManifestEntry {
+    id: String,
+    kind: String,
+    display_name: String,
+    relative_path: String,
+}
 
 pub struct ResourceRegistry {
     records: RwLock<HashMap<ResourceId, ResourceRecord>>,
@@ -42,11 +61,13 @@ impl ResourceRegistry {
     ) -> Result<Self, ApplicationError> {
         filesystem.create_dir_all(owned_root).map_err(internal_io)?;
         let owned_root = filesystem.canonicalize(owned_root).map_err(internal_io)?;
-        Ok(Self {
+        let registry = Self {
             records: RwLock::new(HashMap::new()),
             owned_root,
             filesystem,
-        })
+        };
+        registry.load_owned_manifest()?;
+        Ok(registry)
     }
 
     #[must_use]
@@ -112,6 +133,96 @@ impl ResourceRegistry {
         Ok(record)
     }
 
+    fn load_owned_manifest(&self) -> Result<(), ApplicationError> {
+        let current = self.owned_root.join(RESOURCE_MANIFEST);
+        let legacy = self.owned_root.join(LEGACY_RESOURCE_MANIFEST);
+        let manifest_path = if self.filesystem.exists(&current) {
+            current
+        } else if self.filesystem.exists(&legacy) {
+            legacy
+        } else {
+            return Ok(());
+        };
+        let bytes = self.filesystem.read(&manifest_path).map_err(internal_io)?;
+        let manifest: ResourceManifest = serde_json::from_slice(&bytes)
+            .map_err(|error| ApplicationError::internal(error.to_string()))?;
+        if manifest.version != RESOURCE_MANIFEST_VERSION {
+            return Err(ApplicationError::config_invalid());
+        }
+        let mut records = HashMap::new();
+        for entry in manifest.resources {
+            let id =
+                ResourceId::try_from(entry.id).map_err(|_| ApplicationError::config_invalid())?;
+            let kind = match entry.kind.as_str() {
+                "font" => ResourceKind::Font,
+                "overlay" => ResourceKind::Overlay,
+                _ => return Err(ApplicationError::config_invalid()),
+            };
+            let relative = contained_relative_path(&entry.relative_path)?;
+            let source = self.owned_root.join(relative);
+            let (canonical, inspected) = self.inspect_source(&source, kind)?;
+            if !canonical.starts_with(&self.owned_root) {
+                return Err(ApplicationError::forbidden());
+            }
+            let record = build_record(
+                id.clone(),
+                kind,
+                &entry.display_name,
+                canonical,
+                &inspected,
+                self.owned_root.clone(),
+            );
+            if records.insert(id, record).is_some() {
+                return Err(ApplicationError::config_invalid());
+            }
+        }
+        *self
+            .records
+            .write()
+            .map_err(|_| ApplicationError::internal("resource registry lock poisoned"))? = records;
+        Ok(())
+    }
+
+    fn persist_owned_manifest(&self) -> Result<(), ApplicationError> {
+        let records = self
+            .records
+            .read()
+            .map_err(|_| ApplicationError::internal("resource registry lock poisoned"))?;
+        let mut resources = records
+            .values()
+            .filter(|record| matches!(record.kind(), ResourceKind::Font | ResourceKind::Overlay))
+            .map(|record| {
+                let relative = record
+                    .source()
+                    .strip_prefix(&self.owned_root)
+                    .map_err(|_| ApplicationError::forbidden())?;
+                Ok(ResourceManifestEntry {
+                    id: record.id().as_str().to_owned(),
+                    kind: match record.kind() {
+                        ResourceKind::Font => "font",
+                        ResourceKind::Overlay => "overlay",
+                        _ => return Err(ApplicationError::forbidden()),
+                    }
+                    .to_owned(),
+                    display_name: record.display_name().to_owned(),
+                    relative_path: portable_relative_path(relative)?,
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        drop(records);
+        resources.sort_by(|left, right| left.id.cmp(&right.id));
+        let bytes = serde_json::to_vec_pretty(&ResourceManifest {
+            version: RESOURCE_MANIFEST_VERSION,
+            resources,
+        })
+        .map_err(|error| ApplicationError::internal(error.to_string()))?;
+        let destination = self.owned_root.join(RESOURCE_MANIFEST);
+        crate::config::atomic_write(self.filesystem.as_ref(), &destination, &bytes, |contents| {
+            serde_json::from_slice::<ResourceManifest>(contents)
+                .is_ok_and(|manifest| manifest.version == RESOURCE_MANIFEST_VERSION)
+        })
+    }
+
     fn publish_owned(
         &self,
         kind: ResourceKind,
@@ -151,7 +262,16 @@ impl ResourceRegistry {
             .canonicalize(&destination)
             .map_err(internal_io)?;
         let record = build_record(id, kind, display_name, canonical, inspected, allowed_root);
-        self.insert(record)
+        let record = self.insert(record)?;
+        if let Err(error) = self.persist_owned_manifest() {
+            let _ = self
+                .records
+                .write()
+                .map(|mut records| records.remove(record.id()));
+            let _ = remove_if_present(self.filesystem.as_ref(), record.source());
+            return Err(error);
+        }
+        Ok(record)
     }
 
     fn revalidate(&self, record: &ResourceRecord) -> Result<ResourceRecord, ApplicationError> {
@@ -239,6 +359,13 @@ impl ResourceRepository for ResourceRegistry {
             && record.source().starts_with(&self.owned_root);
         let generated_preview = record.kind() == ResourceKind::Preview
             && record.source().starts_with(record.allowed_root());
+        if owned_resource && let Err(error) = self.persist_owned_manifest() {
+            self.records
+                .write()
+                .map_err(|_| ApplicationError::internal("resource registry lock poisoned"))?
+                .insert(record.id().clone(), record.clone());
+            return Err(error);
+        }
         if owned_resource || generated_preview {
             remove_if_present(self.filesystem.as_ref(), record.source())?;
         }
@@ -262,6 +389,32 @@ impl ResourceRepository for ResourceRegistry {
             |records| records.values().cloned().collect(),
         )
     }
+}
+
+fn contained_relative_path(value: &str) -> Result<PathBuf, ApplicationError> {
+    let path = Path::new(value);
+    if path.as_os_str().is_empty()
+        || !path
+            .components()
+            .all(|component| matches!(component, std::path::Component::Normal(_)))
+    {
+        return Err(ApplicationError::forbidden());
+    }
+    Ok(path.to_path_buf())
+}
+
+fn portable_relative_path(path: &Path) -> Result<String, ApplicationError> {
+    let parts = path
+        .components()
+        .map(|component| match component {
+            std::path::Component::Normal(value) => Ok(value.to_string_lossy()),
+            _ => Err(ApplicationError::forbidden()),
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    if parts.is_empty() {
+        return Err(ApplicationError::forbidden());
+    }
+    Ok(parts.join("/"))
 }
 
 impl IdGenerator for ResourceRegistry {
