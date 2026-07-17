@@ -108,6 +108,18 @@ impl From<TaskStatus> for TaskStatusEventDto {
     }
 }
 
+impl From<&TaskDescriptorDto> for TaskStatusEventDto {
+    fn from(task: &TaskDescriptorDto) -> Self {
+        Self {
+            task_id: task.id.clone(),
+            state: task.state,
+            progress: task.progress,
+            preview: task.preview,
+            cancellation_reason: None,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[serde(rename_all = "camelCase")]

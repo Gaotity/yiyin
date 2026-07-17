@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer } from 'react'
+import { useCallback, useEffect, useReducer, useRef } from 'react'
 import { parseCommandError, type PlatformClient } from '../platform/client'
 import type {
   BootstrapDto,
@@ -41,6 +41,7 @@ const initialState: AppState = {
 
 export function useAppController(client: PlatformClient) {
   const [state, dispatch] = useReducer(reducer, initialState)
+  const previewRequest = useRef(0)
 
   const load = useCallback(async () => {
     try {
@@ -95,37 +96,113 @@ export function useAppController(client: PlatformClient) {
     dispatch({ type: 'config-replaced', config })
   }, [])
 
-  return {
-    ...state,
-    retry: load,
-    selectTask: (id: string | null) => dispatch({ type: 'selected', id }),
-    chooseImages: async () => replaceTasks(await client.chooseImages()),
-    startTasks: async () => {
-      const ids = state.snapshot?.tasks.map((task) => task.id) ?? []
-      replaceTasks(await client.startTasks(ids))
+  const selectTask = useCallback((id: string | null) => {
+    dispatch({ type: 'selected', id })
+  }, [])
+
+  const chooseImages = useCallback(async () => {
+    replaceTasks(await client.chooseImages())
+  }, [client, replaceTasks])
+
+  const startTasks = useCallback(async () => {
+    const tasks = state.snapshot?.tasks ?? []
+    const selected = state.selectedTaskId
+    const ids = selected
+      ? [
+          selected,
+          ...tasks.filter((task) => task.id !== selected).map(({ id }) => id),
+        ]
+      : tasks.map(({ id }) => id)
+    replaceTasks(await client.startTasks(ids))
+  }, [client, replaceTasks, state.selectedTaskId, state.snapshot?.tasks])
+
+  const previewTask = useCallback(
+    async (id: string) => {
+      const request = ++previewRequest.current
+      const tasks = await client.previewTask(id)
+      if (request === previewRequest.current) {
+        replaceTasks(tasks)
+      }
     },
-    clearTasks: async () => replaceTasks(await client.clearTasks()),
-    resetConfig: async () => replaceConfig(await client.resetConfig()),
-    updateConfig: async (config: PublicConfigDto) => {
+    [client, replaceTasks],
+  )
+
+  const invalidatePreviewRequests = useCallback(() => {
+    previewRequest.current += 1
+  }, [])
+
+  const clearTasks = useCallback(async () => {
+    invalidatePreviewRequests()
+    replaceTasks(await client.clearTasks())
+  }, [client, invalidatePreviewRequests, replaceTasks])
+
+  const chooseOutputDirectory = useCallback(async () => {
+    replaceConfig(await client.chooseOutputDirectory())
+  }, [client, replaceConfig])
+
+  const openOutputDirectory = useCallback(async () => {
+    await client.openOutputDirectory()
+  }, [client])
+
+  const readTaskExif = useCallback(
+    (id: string) => client.readTaskExif(id),
+    [client],
+  )
+
+  const resetConfig = useCallback(async () => {
+    replaceConfig(await client.resetConfig())
+  }, [client, replaceConfig])
+
+  const updateConfig = useCallback(
+    async (config: PublicConfigDto) => {
       const canonical = await client.updateConfig({ config })
       replaceConfig(canonical)
       return canonical
     },
-    registerFont: async (name: string) => {
+    [client, replaceConfig],
+  )
+
+  const registerFont = useCallback(
+    async (name: string) => {
       const resource = await client.registerFont(name)
       dispatch({ type: 'resource-upserted', resource })
       return resource
     },
-    removeFont: async (id: string) => {
+    [client],
+  )
+
+  const removeFont = useCallback(
+    async (id: string) => {
       const fonts = await client.removeFont(id)
       dispatch({ type: 'fonts-replaced', fonts })
       return fonts
     },
-    registerOverlay: async () => {
-      const resource = await client.registerOverlay()
-      dispatch({ type: 'resource-upserted', resource })
-      return resource
-    },
+    [client],
+  )
+
+  const registerOverlay = useCallback(async () => {
+    const resource = await client.registerOverlay()
+    dispatch({ type: 'resource-upserted', resource })
+    return resource
+  }, [client])
+
+  return {
+    ...state,
+    retry: load,
+    selectTask,
+    chooseImages,
+    startTasks,
+    previewTask,
+    invalidatePreviewRequests,
+    clearTasks,
+    chooseOutputDirectory,
+    openOutputDirectory,
+    readTaskExif,
+    resetConfig,
+    updateConfig,
+    registerFont,
+    removeFont,
+    registerOverlay,
   }
 }
 

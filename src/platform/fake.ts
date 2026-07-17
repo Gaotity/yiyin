@@ -208,6 +208,60 @@ export function createFakePlatformClient(
   }
 }
 
+export function createBrowserFakePlatformClient(): PlatformClient {
+  const harness = createFakePlatformClient()
+  const registered: TaskDescriptorDto = {
+    id: 'browser-task',
+    displayName: 'browser-photo.jpg',
+    state: 'registered',
+    progress: 0,
+    preview: false,
+    resource: null,
+  }
+  let chooseCount = 0
+
+  harness.client.chooseImages = () => {
+    chooseCount += 1
+    if (chooseCount > 1) {
+      return Promise.reject({
+        code: 'FILE_INVALID',
+        message: 'The selected file is invalid.',
+      })
+    }
+    harness.setSnapshot(defaultBootstrap({ tasks: [registered] }))
+    return Promise.resolve(clone([registered]))
+  }
+  harness.client.previewTask = () =>
+    Promise.resolve([
+      {
+        ...registered,
+        state: 'completed',
+        progress: 100,
+        preview: true,
+        resource: fakeResource(
+          'browser-preview',
+          'preview',
+          registered.displayName,
+        ),
+      },
+    ])
+  harness.client.startTasks = () =>
+    Promise.resolve([
+      {
+        ...registered,
+        state: 'completed',
+        progress: 100,
+        resource: fakeResource(
+          'browser-output',
+          'output',
+          registered.displayName,
+        ),
+      },
+    ])
+
+  return harness.client
+}
+
 function fakeResource(
   id: string,
   kind: ResourceDescriptorDto['kind'],

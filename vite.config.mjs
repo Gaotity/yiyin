@@ -5,13 +5,16 @@ import { configDefaults } from 'vitest/config'
 export default defineConfig({
   clearScreen: false,
   plugins: [react()],
+  optimizeDeps: {
+    entries: ['index.html'],
+  },
   server: {
     strictPort: true,
     port: 1420,
   },
   test: {
     environment: 'jsdom',
-    exclude: [...configDefaults.exclude, 'tests/legacy/**'],
+    exclude: [...configDefaults.exclude, 'tests/legacy/**', 'tests/ui/**'],
     passWithNoTests: true,
   },
 })

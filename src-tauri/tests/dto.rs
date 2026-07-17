@@ -44,3 +44,24 @@ fn public_config_round_trip_preserves_rust_owned_output_and_system_invariants() 
         yiyin_application::ErrorCode::ConfigInvalid
     );
 }
+
+#[test]
+fn drag_drop_notification_reuses_the_path_free_task_status_contract() {
+    let task = dto_under_test::TaskDescriptorDto {
+        id: "opaque-task-id".to_owned(),
+        display_name: "input.jpg".to_owned(),
+        state: dto_under_test::TaskStateDto::Registered,
+        progress: 0,
+        preview: false,
+        resource: None,
+    };
+
+    let event = dto_under_test::TaskStatusEventDto::from(&task);
+    let serialized = serde_json::to_string(&event).expect("serialize task status event");
+
+    assert_eq!(event.task_id, "opaque-task-id");
+    assert_eq!(event.state, dto_under_test::TaskStateDto::Registered);
+    assert_eq!(event.cancellation_reason, None);
+    assert!(!serialized.contains("input.jpg"));
+    assert!(!serialized.contains('/'));
+}

@@ -1,26 +1,18 @@
 import { useState } from 'react'
 import type { PlatformClient } from '../platform/client'
 import { tauriClient } from '../platform/client'
-import type { TaskStateDto } from '../platform/types'
 import { Footer } from '../features/chrome/Footer'
 import { TitleBar } from '../features/chrome/TitleBar'
 import { FieldDrawer } from '../features/settings/FieldDrawer'
 import { RenderingSettings } from '../features/settings/RenderingSettings'
 import { TemplateDrawer } from '../features/settings/TemplateDrawer'
 import '../features/settings/settings.css'
+import { TaskWorkspace } from '../features/tasks/TaskWorkspace'
+import '../features/tasks/tasks.css'
 import { useAppController } from './useAppController'
 
 interface AppProps {
   client?: PlatformClient
-}
-
-const STATE_LABELS: Record<TaskStateDto, string> = {
-  registered: '等待处理',
-  queued: '等待处理',
-  running: '处理中',
-  completed: '已完成',
-  failed: '处理失败',
-  cancelled: '已取消',
 }
 
 export function App({ client = tauriClient }: AppProps) {
@@ -75,42 +67,26 @@ export function App({ client = tauriClient }: AppProps) {
             config={controller.snapshot.config}
             onSave={controller.updateConfig}
           />
-          <section className="task-list" aria-label="图片任务">
-            {controller.snapshot.tasks.map((task) => (
-              <button
-                className={
-                  task.id === controller.selectedTaskId
-                    ? 'task selected'
-                    : 'task'
-                }
-                key={task.id}
-                type="button"
-                onClick={() => controller.selectTask(task.id)}
-              >
-                <span>{task.displayName}</span>
-                <span>{STATE_LABELS[task.state]}</span>
-                <span>{task.progress}%</span>
-              </button>
-            ))}
-          </section>
+          <TaskWorkspace
+            config={controller.snapshot.config}
+            tasks={controller.snapshot.tasks}
+            selectedId={controller.selectedTaskId}
+            readExif={controller.readTaskExif}
+            onSelect={controller.selectTask}
+            onChooseImages={controller.chooseImages}
+            onStartTasks={controller.startTasks}
+            onPreviewTask={controller.previewTask}
+            onInvalidatePreview={controller.invalidatePreviewRequests}
+            onChooseOutput={controller.chooseOutputDirectory}
+            onOpenOutput={controller.openOutputDirectory}
+            onClear={controller.clearTasks}
+            onOpenFields={() => setFieldDrawerOpen(true)}
+            onOpenTemplates={() => setTemplateDrawerOpen(true)}
+          />
         </div>
         <div className="guide-copy" aria-hidden="true">
           <strong>白嫖指南(●°u°●)​ 」</strong>
           <span>萌新指北(｡･ω･｡)</span>
-        </div>
-        <div className="primary-actions">
-          <button type="button" onClick={() => void controller.chooseImages()}>
-            添加图片
-          </button>
-          <button type="button" onClick={() => void controller.startTasks()}>
-            生成印框
-          </button>
-          <button type="button" onClick={() => setFieldDrawerOpen(true)}>
-            参数设置
-          </button>
-          <button type="button" onClick={() => setTemplateDrawerOpen(true)}>
-            模板设置
-          </button>
         </div>
       </main>
       <FieldDrawer
