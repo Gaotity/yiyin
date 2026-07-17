@@ -162,6 +162,20 @@ describe('GitHub automation policy', () => {
     expect(packaging).toContain('target/release/yiyin.exe')
   })
 
+  it('disables setup-node automatic package-manager caching before Corepack activation', () => {
+    for (const path of [
+      '.github/workflows/ci.yml',
+      '.github/workflows/package.yml',
+    ]) {
+      const workflow = read(path)
+      const setupNodeCount =
+        workflow.match(/actions\/setup-node@/g)?.length ?? 0
+      const disabledCacheCount =
+        workflow.match(/package-manager-cache:\s*false/g)?.length ?? 0
+      expect(disabledCacheCount, path).toBe(setupNodeCount)
+    }
+  })
+
   it('separates Dependabot by ecosystem and contains no auto-merge', () => {
     const path = '.github/dependabot.yml'
     expect(existsSync(join(root, path))).toBe(true)
