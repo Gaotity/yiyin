@@ -232,6 +232,14 @@ pub(crate) fn decode_legacy_config(
             known.insert(key.to_owned(), value.clone());
         }
     }
+    if let Some(serde_json::Value::Array(templates)) = known.get_mut("temps") {
+        for template in templates {
+            if let serde_json::Value::Object(template) = template {
+                // The legacy app persisted this unused layout placeholder on every template.
+                template.remove("position");
+            }
+        }
+    }
     let mut stored = serde_json::from_value::<StoredConfigV1>(serde_json::Value::Object(known))
         .map_err(|_| ApplicationError::config_invalid())?;
     let mut image_references = Vec::new();

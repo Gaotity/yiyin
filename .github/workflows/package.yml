@@ -34,10 +34,10 @@ jobs:
       - name: Build unsigned package
         run: pnpm tauri build --bundles app,dmg
       - name: Verify package contents
-        run: pnpm verify:bundle -- --platform macos --artifact "src-tauri/target/release/bundle/macos/壹印.app"
+        run: pnpm verify:bundle -- --platform macos --artifact "target/release/bundle/macos/壹印.app"
       - name: Launch smoke
         run: |
-          executable="$(find "src-tauri/target/release/bundle/macos/壹印.app/Contents/MacOS" -type f -perm +111 | head -n 1)"
+          executable="$(find "target/release/bundle/macos/壹印.app/Contents/MacOS" -type f -perm +111 | head -n 1)"
           "$executable" &
           app_pid=$!
           sleep 5
@@ -49,8 +49,8 @@ jobs:
         with:
           name: yiyin-macos-unsigned
           path: |
-            src-tauri/target/release/bundle/macos
-            src-tauri/target/release/bundle/dmg
+            target/release/bundle/macos
+            target/release/bundle/dmg
 
   windows-package-and-desktop-smoke:
     name: Windows package and desktop smoke
@@ -72,7 +72,7 @@ jobs:
       - name: Build unsigned production package
         run: pnpm tauri build --bundles nsis
       - name: Verify production package contents
-        run: pnpm verify:bundle -- --platform windows --artifact src-tauri/target/release/bundle
+        run: pnpm verify:bundle -- --platform windows --artifact target/release/bundle
       - name: Install pinned tauri-driver
         shell: bash
         run: cargo install tauri-driver --locked --version "$TAURI_DRIVER_VERSION"
@@ -92,7 +92,7 @@ jobs:
           $driver = Start-Process -FilePath "$HOME\.cargo\bin\tauri-driver.exe" -ArgumentList @("--native-driver", $edgeDriver) -PassThru
           $driver.Id | Out-File "$env:RUNNER_TEMP\tauri-driver.pid"
       - name: Desktop W3C smoke
-        run: pnpm smoke:w3c -- --application src-tauri/target/release/yiyin.exe
+        run: pnpm smoke:w3c -- --application target/release/yiyin.exe
       - name: Stop tauri-driver
         if: always()
         shell: pwsh
@@ -104,4 +104,4 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: yiyin-windows-unsigned
-          path: src-tauri/target/release/bundle/nsis
+          path: target/release/bundle/nsis

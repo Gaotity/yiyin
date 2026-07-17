@@ -337,7 +337,7 @@ impl TokioTaskQueue {
         if matches!(
             target.status.state(),
             TaskState::Queued | TaskState::Running
-        ) && !(preview_request && target_is_current_preview)
+        ) && !target_is_current_preview
         {
             return Err(ApplicationError::invalid_request(
                 "The task is already running.",
@@ -345,7 +345,9 @@ impl TokioTaskQueue {
         }
 
         let mut events = Vec::new();
-        if preview_request && let Some(stale) = preview.take() {
+        if (preview_request || target_is_current_preview)
+            && let Some(stale) = preview.take()
+        {
             stale.cancellation.cancel();
             if let Some(record) = records.get_mut(&stale.task_id)
                 && record.execution == stale.execution

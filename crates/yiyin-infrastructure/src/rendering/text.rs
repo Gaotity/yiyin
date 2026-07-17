@@ -327,10 +327,10 @@ mod tests {
         let directory = tempfile::tempdir().expect("create resource directory");
         let resources = ResourceRegistry::new(directory.path()).expect("create resources");
         let bundled_fonts = vec![
-            include_bytes!("../../../../web/assets/font/春风楷.ttf").to_vec(),
-            include_bytes!("../../../../web/assets/font/千图小兔体.ttf").to_vec(),
-            include_bytes!("../../../../web/assets/font/FrederickatheGreat.ttf").to_vec(),
-            include_bytes!("../../../../web/assets/font/Neoneon.otf").to_vec(),
+            include_bytes!("../../../../assets/fonts/春风楷.ttf").to_vec(),
+            include_bytes!("../../../../assets/fonts/千图小兔体.ttf").to_vec(),
+            include_bytes!("../../../../assets/fonts/FrederickatheGreat.ttf").to_vec(),
+            include_bytes!("../../../../assets/fonts/Neoneon.otf").to_vec(),
         ];
 
         let catalog = build_font_catalog(&bundled_fonts, &resources).expect("load fonts");
@@ -359,7 +359,7 @@ mod tests {
         let source = directory.path().join("custom.otf");
         std::fs::write(
             &source,
-            include_bytes!("../../../../web/assets/font/Neoneon.otf"),
+            include_bytes!("../../../../assets/fonts/Neoneon.otf"),
         )
         .expect("write custom font");
         let resources =
@@ -369,7 +369,7 @@ mod tests {
             .expect("register custom font");
 
         let catalog = build_font_catalog(
-            &[include_bytes!("../../../../web/assets/font/千图小兔体.ttf").to_vec()],
+            &[include_bytes!("../../../../assets/fonts/千图小兔体.ttf").to_vec()],
             &resources,
         )
         .expect("load fonts");

@@ -19,9 +19,9 @@ export function PreviewPane({ enabled, task }: PreviewPaneProps) {
   }
 
   if (
-    task.preview &&
     task.state === 'completed' &&
-    task.resource?.kind === 'preview'
+    ((task.preview && task.resource?.kind === 'preview') ||
+      (!task.preview && task.resource?.kind === 'output'))
   ) {
     return (
       <section className="preview-pane" aria-label="图片预览">

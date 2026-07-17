@@ -15,12 +15,28 @@ use yiyin_application::{
 };
 use yiyin_domain::{
     BackgroundKind, BuiltInField, FieldValues, ImageDensity, ImageOrientation, RenderPlan,
-    RenderRequest, RenderStage, ResourceKind, plan_rows,
+    RenderRequest, RenderStage, ResourceKind, TemplateField, plan_rows,
 };
 
 use crate::{
     FileSystem, ResourceRegistry, StdFileSystem, normalize_make, normalize_model_for_templates,
 };
+
+const BUILT_IN_LOGO_VENDORS: [&str; 13] = [
+    "canon",
+    "dji",
+    "fujifilm",
+    "hasselblad",
+    "leica",
+    "nikon",
+    "olympus",
+    "panasonic",
+    "pentax",
+    "ricoh",
+    "sigma",
+    "songdian",
+    "sony",
+];
 
 pub struct RustImageRenderer {
     resources: Arc<ResourceRegistry>,
@@ -195,6 +211,7 @@ impl RustImageRenderer {
         advance(cancellation, progress, RenderStage::PlanningText)?;
         let mut fields = request.config().temp_fields.clone();
         fields.extend(request.config().custom_temp_fields.clone());
+        apply_builtin_logo(&mut fields, request.metadata(), self.resources.as_ref());
         let rows = plan_rows(
             &request.config().templates,
             &FieldValues::new(display_metadata, fields),
@@ -318,6 +335,45 @@ impl RustImageRenderer {
             quality,
         ))
     }
+}
+
+fn apply_builtin_logo(
+    fields: &mut [TemplateField],
+    metadata: &yiyin_domain::Metadata,
+    resources: &ResourceRegistry,
+) {
+    let Some(make) = metadata.value(BuiltInField::Make) else {
+        return;
+    };
+    let lookup = make.replace("CORPORATION", "").trim().to_ascii_lowercase();
+    if !BUILT_IN_LOGO_VENDORS.contains(&lookup.as_str()) {
+        return;
+    }
+    let records = resources.snapshot();
+    let id_for = |suffix: &str| {
+        let name = format!("{lookup}-{suffix}.png");
+        records
+            .iter()
+            .find(|record| {
+                record.kind() == ResourceKind::BundledAsset && record.display_name() == name
+            })
+            .map(|record| record.id().clone())
+    };
+    let (Some(dark), Some(light)) = (id_for("b"), id_for("w")) else {
+        return;
+    };
+    let Some(field) = fields
+        .iter_mut()
+        .find(|field| field.key().as_str() == BuiltInField::Make.key())
+    else {
+        return;
+    };
+    if field.content_kind() == yiyin_domain::FieldContentKind::Image
+        || (field.uses_custom_value() && field.forces_custom_value())
+    {
+        return;
+    }
+    field.set_image_variants(Some(dark), Some(light));
 }
 
 impl ImageRenderer for RustImageRenderer {
@@ -444,4 +500,63 @@ fn remove_if_present(filesystem: &dyn FileSystem, path: &Path) -> Result<(), App
 )]
 fn internal_io(error: std::io::Error) -> ApplicationError {
     ApplicationError::internal(error.to_string())
+}
+
+#[cfg(test)]
+mod bundled_logo_tests {
+    use std::fs;
+
+    use yiyin_domain::{BuiltInField, FieldContentKind, Metadata, default_template_fields};
+
+    use super::*;
+
+    #[test]
+    fn applies_registered_vendor_logo_without_overriding_a_forced_field() {
+        let directory = tempfile::tempdir().expect("create resource root");
+        let registry = ResourceRegistry::new(directory.path()).expect("create registry");
+        let dark_path = directory.path().join("sony-b.png");
+        let light_path = directory.path().join("sony-w.png");
+        fs::write(
+            &dark_path,
+            include_bytes!("../../../../assets/logos/sony-b.png"),
+        )
+        .expect("write dark logo");
+        fs::write(
+            &light_path,
+            include_bytes!("../../../../assets/logos/sony-w.png"),
+        )
+        .expect("write light logo");
+        let dark = registry
+            .register_bundled(&dark_path, "sony-b.png")
+            .expect("register dark logo");
+        let light = registry
+            .register_bundled(&light_path, "sony-w.png")
+            .expect("register light logo");
+        let mut metadata = Metadata::default();
+        metadata.set(BuiltInField::Make, "SONY CORPORATION");
+
+        let mut fields = default_template_fields();
+        apply_builtin_logo(&mut fields, &metadata, &registry);
+        let make = fields
+            .iter()
+            .find(|field| field.key().as_str() == "Make")
+            .expect("Make field");
+        assert_eq!(make.content_kind(), FieldContentKind::Image);
+        assert_eq!(make.dark_image(), Some(dark.id()));
+        assert_eq!(make.light_image(), Some(light.id()));
+
+        let mut forced = default_template_fields();
+        forced
+            .iter_mut()
+            .find(|field| field.key().as_str() == "Make")
+            .expect("Make field")
+            .set_custom_text("Studio", true);
+        apply_builtin_logo(&mut forced, &metadata, &registry);
+        let make = forced
+            .iter()
+            .find(|field| field.key().as_str() == "Make")
+            .expect("Make field");
+        assert_eq!(make.content_kind(), FieldContentKind::Text);
+        assert_eq!(make.custom_value(), "Studio");
+    }
 }

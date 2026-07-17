@@ -119,9 +119,15 @@ export function useAppController(client: PlatformClient) {
   const previewTask = useCallback(
     async (id: string) => {
       const request = ++previewRequest.current
-      const tasks = await client.previewTask(id)
-      if (request === previewRequest.current) {
-        replaceTasks(tasks)
+      try {
+        const tasks = await client.previewTask(id)
+        if (request === previewRequest.current) {
+          replaceTasks(tasks)
+        }
+      } catch (error) {
+        if (request === previewRequest.current) {
+          throw error
+        }
       }
     },
     [client, replaceTasks],

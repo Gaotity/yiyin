@@ -42,6 +42,30 @@ describe('release-age gate', () => {
 })
 
 describe('bundle verification', () => {
+  it('accepts the pnpm script argument separator', async () => {
+    const path = resolve(root, 'scripts/verify-bundle.mjs')
+    const module = await importIfPresent<{
+      parseArgs(argv: string[]): { platform: string; artifact: string }
+    }>(path)
+    expect(module).not.toBeNull()
+    if (!module) {
+      return
+    }
+
+    expect(
+      module.parseArgs([
+        '--',
+        '--platform',
+        'macos',
+        '--artifact',
+        'target/release/bundle/macos/壹印.app',
+      ]),
+    ).toEqual({
+      platform: 'macos',
+      artifact: 'target/release/bundle/macos/壹印.app',
+    })
+  })
+
   it('accepts an unsigned path-clean macOS app and rejects forbidden payloads', async () => {
     const path = resolve(root, 'scripts/verify-bundle.mjs')
     const module = await importIfPresent<{
@@ -89,6 +113,26 @@ describe('bundle verification', () => {
   })
 })
 
+describe('W3C smoke command', () => {
+  it('accepts the pnpm script argument separator', async () => {
+    const path = resolve(root, 'scripts/w3c-smoke.mjs')
+    const module = await importIfPresent<{
+      parseArgs(argv: string[]): { application: string; baseUrl: string }
+    }>(path)
+    expect(module).not.toBeNull()
+    if (!module) {
+      return
+    }
+
+    expect(
+      module.parseArgs(['--', '--application', 'target/release/yiyin.exe']),
+    ).toEqual({
+      application: 'target/release/yiyin.exe',
+      baseUrl: 'http://127.0.0.1:4444',
+    })
+  })
+})
+
 async function importIfPresent<T>(path: string): Promise<T | null> {
   try {
     return (await import(`${pathToFileURL(path).href}?t=${Date.now()}`)) as T
@@ -106,6 +150,7 @@ async function importIfPresent<T>(path: string): Promise<T | null> {
 
 function plist(name: string, identifier: string, version: string): string {
   return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist><dict>
 <key>CFBundleName</key><string>${name}</string>
 <key>CFBundleIdentifier</key><string>${identifier}</string>

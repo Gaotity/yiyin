@@ -19,6 +19,8 @@ use crate::{
     state::AppState,
 };
 
+use super::run_blocking;
+
 #[tauri::command]
 pub async fn choose_images(
     app: AppHandle<Wry>,
@@ -135,18 +137,21 @@ pub async fn register_overlay(
 }
 
 #[tauri::command]
-pub fn read_task_exif(
-    state: State<'_, AppState>,
+pub async fn read_task_exif(
+    app: AppHandle<Wry>,
     request: TaskIdRequestDto,
 ) -> CommandResult<Option<MetadataDto>> {
-    let id = TaskId::try_from(request.id).map_err(|_| {
-        yiyin_application::ApplicationError::invalid_request("The task ID is invalid.")
-    })?;
-    state
-        .read_task_exif
-        .execute(&id)
-        .map(|metadata| metadata.as_ref().map(Into::into))
-        .map_err(Into::into)
+    run_blocking(app, move |state| {
+        let id = TaskId::try_from(request.id).map_err(|_| {
+            yiyin_application::ApplicationError::invalid_request("The task ID is invalid.")
+        })?;
+        state
+            .read_task_exif
+            .execute(&id)
+            .map(|metadata| metadata.as_ref().map(Into::into))
+            .map_err(Into::into)
+    })
+    .await
 }
 
 fn task_dtos(state: &AppState) -> Vec<TaskDescriptorDto> {

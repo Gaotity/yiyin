@@ -83,7 +83,10 @@ describe('dependency and desktop security policy', () => {
     const capability = JSON.parse(read('src-tauri/capabilities/main.json')) as {
       permissions: unknown[]
     }
-    expect(capability.permissions).toEqual([])
+    expect(capability.permissions).toEqual([
+      'core:event:allow-listen',
+      'core:event:allow-unlisten',
+    ])
   })
 
   it('defines an opt-in fixture feature with no production default', () => {
@@ -154,6 +157,9 @@ describe('GitHub automation policy', () => {
     expect([ci, codeql, packaging].join('\n')).toContain('1.97.0')
     expect(packaging).toContain('CARGO_DENY_VERSION:')
     expect(packaging).toContain('TAURI_DRIVER_VERSION:')
+    expect(packaging).not.toContain('src-tauri/target/')
+    expect(packaging).toContain('target/release/bundle/macos/壹印.app')
+    expect(packaging).toContain('target/release/yiyin.exe')
   })
 
   it('separates Dependabot by ecosystem and contains no auto-merge', () => {

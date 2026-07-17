@@ -3,7 +3,7 @@
   "version": "1.6.0",
   "private": true,
   "type": "module",
-  "description": "一款照片水印添加工具",
+  "description": "A local desktop photo framing and metadata tool",
   "author": {
     "name": "ggchivalrous",
     "url": "https://github.com/ggchivalrous/yiyin"

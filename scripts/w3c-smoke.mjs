@@ -132,11 +132,12 @@ async function waitFor(operation, timeout) {
   throw lastError ?? new Error('WebDriver wait timed out')
 }
 
-function parseArgs(argv) {
+export function parseArgs(argv) {
+  const args = argv[0] === '--' ? argv.slice(1) : argv
   const options = { baseUrl: 'http://127.0.0.1:4444' }
-  for (let index = 0; index < argv.length; index += 2) {
-    const key = argv[index]
-    const value = argv[index + 1]
+  for (let index = 0; index < args.length; index += 2) {
+    const key = args[index]
+    const value = args[index + 1]
     if (!key?.startsWith('--') || !value) {
       throw new Error('Expected --application <path> [--base-url <url>]')
     }

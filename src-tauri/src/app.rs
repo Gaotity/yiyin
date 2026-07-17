@@ -30,7 +30,11 @@ fn single_instance_plugin() -> tauri::plugin::TauriPlugin<Wry> {
 pub fn builder() -> tauri::Builder<Wry> {
     tauri::Builder::default()
         .plugin(single_instance_plugin())
-        .plugin(tauri_plugin_log::Builder::new().build())
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .level(log::LevelFilter::Info)
+                .build(),
+        )
         .plugin(tauri_plugin_dialog::init())
         .plugin(
             tauri_plugin_opener::Builder::new()

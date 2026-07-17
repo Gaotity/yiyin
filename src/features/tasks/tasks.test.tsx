@@ -10,6 +10,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../../app/App'
 import { createFakePlatformClient, defaultBootstrap } from '../../platform/fake'
 import type { TaskDescriptorDto } from '../../platform/types'
+import { PreviewPane } from './PreviewPane'
 
 afterEach(() => {
   cleanup()
@@ -190,6 +191,115 @@ describe('task workflows', () => {
 })
 
 describe('preview reconciliation', () => {
+  it('shows a completed export in the preview pane', () => {
+    const completed = task('task-one', 'one.jpg', {
+      state: 'completed',
+      progress: 100,
+      resource: {
+        id: 'output-one',
+        kind: 'output',
+        displayName: 'one.jpg',
+        url: 'yiyin://resource/output-one',
+      },
+    })
+
+    render(<PreviewPane enabled task={completed} />)
+
+    expect(
+      screen.getByRole('img', { name: '预览图' }).getAttribute('src'),
+    ).toBe('yiyin://resource/output-one')
+  })
+
+  it('cancels a pending preview when export starts', async () => {
+    const existing = task('task-one', 'one.jpg')
+    const fake = createFakePlatformClient({
+      snapshot: defaultBootstrap({ tasks: [existing] }),
+    })
+    const previewTask = vi.spyOn(fake.client, 'previewTask')
+    render(<App client={fake.client} />)
+    await screen.findByRole('switch', { name: '实时预览' })
+    vi.useFakeTimers()
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('switch', { name: '实时预览' }))
+      await Promise.resolve()
+    })
+    fireEvent.click(screen.getByRole('button', { name: '生成印框' }))
+    await vi.advanceTimersByTimeAsync(300)
+
+    expect(previewTask).not.toHaveBeenCalled()
+  })
+
+  it('ignores an in-flight preview failure after export starts', async () => {
+    const existing = task('task-one', 'one.jpg')
+    const fake = createFakePlatformClient({
+      snapshot: defaultBootstrap({ tasks: [existing] }),
+    })
+    let rejectPreview: ((reason: unknown) => void) | undefined
+    const previewTask = vi.spyOn(fake.client, 'previewTask').mockImplementation(
+      () =>
+        new Promise<TaskDescriptorDto[]>((_resolve, reject) => {
+          rejectPreview = reject
+        }),
+    )
+    render(<App client={fake.client} />)
+    await screen.findByRole('switch', { name: '实时预览' })
+    vi.useFakeTimers()
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('switch', { name: '实时预览' }))
+      await Promise.resolve()
+    })
+    await vi.advanceTimersByTimeAsync(300)
+    expect(previewTask).toHaveBeenCalledTimes(1)
+    fireEvent.click(screen.getByRole('button', { name: '生成印框' }))
+    await act(async () => {
+      rejectPreview?.({
+        code: 'INVALID_REQUEST',
+        message: 'The task is already running.',
+      })
+      await Promise.resolve()
+    })
+
+    expect(screen.queryByText('The task is already running.')).toBeNull()
+  })
+
+  it('does not regenerate a preview after an equivalent bootstrap refresh', async () => {
+    const existing = task('task-one', 'one.jpg')
+    const fake = createFakePlatformClient({
+      snapshot: defaultBootstrap({ tasks: [existing] }),
+    })
+    const previewTask = vi
+      .spyOn(fake.client, 'previewTask')
+      .mockResolvedValue([existing])
+    render(<App client={fake.client} />)
+    await screen.findByRole('switch', { name: '实时预览' })
+    vi.useFakeTimers()
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('switch', { name: '实时预览' }))
+      await Promise.resolve()
+    })
+    await vi.advanceTimersByTimeAsync(300)
+    expect(previewTask).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      fake.emitTaskStatus({
+        taskId: existing.id,
+        state: 'completed',
+        progress: 100,
+        preview: true,
+        cancellationReason: null,
+      })
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(fake.calls.bootstrap).toBeGreaterThan(1)
+    await vi.advanceTimersByTimeAsync(300)
+
+    expect(previewTask).toHaveBeenCalledTimes(1)
+  })
+
   it('debounces requests, ignores stale completion, clears when disabled, and shows current failure', async () => {
     const first = task('task-one', 'one.jpg')
     const second = task('task-two', 'two.jpg')

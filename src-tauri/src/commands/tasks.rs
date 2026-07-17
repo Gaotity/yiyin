@@ -4,7 +4,7 @@
     reason = "Tauri commands use framework-owned extractors and map application errors"
 )]
 
-use tauri::State;
+use tauri::{AppHandle, State, Wry};
 use yiyin_domain::TaskId;
 
 use crate::{
@@ -13,30 +13,38 @@ use crate::{
     state::AppState,
 };
 
+use super::run_blocking;
+
 #[tauri::command]
-pub fn start_tasks(
-    state: State<'_, AppState>,
+pub async fn start_tasks(
+    app: AppHandle<Wry>,
     request: TaskIdsRequestDto,
 ) -> CommandResult<Vec<TaskDescriptorDto>> {
-    let ids = task_ids(request.ids)?;
-    state
-        .start_tasks
-        .execute(&ids)
-        .map(|tasks| tasks.iter().map(Into::into).collect())
-        .map_err(Into::into)
+    run_blocking(app, move |state| {
+        let ids = task_ids(request.ids)?;
+        state
+            .start_tasks
+            .execute(&ids)
+            .map(|tasks| tasks.iter().map(Into::into).collect())
+            .map_err(Into::into)
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn preview_task(
-    state: State<'_, AppState>,
+pub async fn preview_task(
+    app: AppHandle<Wry>,
     request: TaskIdRequestDto,
 ) -> CommandResult<Vec<TaskDescriptorDto>> {
-    let id = task_id(request.id)?;
-    state
-        .preview_task
-        .execute(&id)
-        .map(|tasks| tasks.iter().map(Into::into).collect())
-        .map_err(Into::into)
+    run_blocking(app, move |state| {
+        let id = task_id(request.id)?;
+        state
+            .preview_task
+            .execute(&id)
+            .map(|tasks| tasks.iter().map(Into::into).collect())
+            .map_err(Into::into)
+    })
+    .await
 }
 
 #[tauri::command]

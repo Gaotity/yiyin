@@ -3,5 +3,8 @@
   "identifier": "main",
   "description": "The main Yiyin window can invoke only application-owned commands.",
   "windows": ["main"],
-  "permissions": []
+  "permissions": [
+    "core:event:allow-listen",
+    "core:event:allow-unlisten"
+  ]
 }

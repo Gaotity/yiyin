@@ -386,6 +386,38 @@ fn latest_preview_wins_when_a_stale_renderer_ignores_cancellation() {
 }
 
 #[test]
+fn export_supersedes_an_active_preview_for_the_same_task() {
+    let mut harness = Harness::new(false);
+    let id = harness.register("preview-then-export");
+    harness
+        .queue
+        .preview(render_request(&id, true))
+        .expect("preview");
+    harness.renderer.wait_for_started(1);
+
+    harness
+        .queue
+        .enqueue(render_request(&id, false))
+        .expect("export supersedes preview");
+    harness.renderer.wait_for_started(2);
+    harness.renderer.release_all();
+    harness.events.wait_for_state(&id, TaskState::Completed);
+    harness.queue.shutdown().expect("shutdown");
+
+    let events = harness.events.for_task(&id);
+    assert!(events.iter().any(|status| {
+        status.state() == TaskState::Cancelled
+            && status.cancellation_reason() == Some(CancellationReason::PreviewSuperseded)
+    }));
+    let snapshot = harness.queue.snapshot();
+    assert!(!snapshot[0].is_preview());
+    assert_eq!(
+        snapshot[0].resource().expect("output resource").kind(),
+        ResourceKind::Output
+    );
+}
+
+#[test]
 fn clear_cancels_active_and_pending_work_before_removing_the_snapshot() {
     let mut harness = Harness::new(false);
     let first = harness.register("clear-first");

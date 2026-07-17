@@ -131,6 +131,7 @@ impl Harness {
   "font": {{"path":"/private/legacy/font.json","dir":"/private/legacy/font","map":{{}}}},
   "options": {{"iot":true,"quality":77}},
   "tempFields": [{{"key":"Make","name":"Logo","type":"img","bImg":"{}","wImg":""}}],
+  "temps": [{{"key":"make-model","name":"Logo型号模版","temp":"{{Make}} {{Model}}","use":true,"type":"system","font":{{"size":3,"bold":true}},"position":{{"left":null,"right":null,"top":null,"bottom":null}},"verticalAlign":"baseline"}}],
   "versionUpdateInfo": {{"version":"1.6.0","downloadLink":"","checkDate":0}}
 }}"#,
                 image_reference.to_string_lossy()

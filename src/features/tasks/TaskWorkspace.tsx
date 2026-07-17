@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { parseCommandError, type PlatformClient } from '../../platform/client'
 import type { PublicConfigDto, TaskDescriptorDto } from '../../platform/types'
 import { OutputControls } from './OutputControls'
@@ -39,6 +39,7 @@ export function TaskWorkspace({
   onOpenTemplates,
 }: TaskWorkspaceProps) {
   const [error, setError] = useState<string | null>(null)
+  const previewTimer = useRef<number | null>(null)
   const selectedTask = useMemo(
     () => tasks.find((task) => task.id === selectedId) ?? null,
     [selectedId, tasks],
@@ -57,17 +58,42 @@ export function TaskWorkspace({
     },
     [showError],
   )
+  const clearPreviewTimer = useCallback(() => {
+    if (previewTimer.current !== null) {
+      window.clearTimeout(previewTimer.current)
+      previewTimer.current = null
+    }
+  }, [])
+  const previewEnabled = config.options.previewVisible
+  const previewConfiguration = JSON.stringify(config)
 
   useEffect(() => {
-    if (!config.options.previewVisible || !selectedId) {
+    clearPreviewTimer()
+    if (!previewEnabled || !selectedId) {
       onInvalidatePreview()
       return
     }
-    const timer = window.setTimeout(() => {
+    void previewConfiguration
+    previewTimer.current = window.setTimeout(() => {
+      previewTimer.current = null
       void run(() => onPreviewTask(selectedId))
     }, 300)
-    return () => window.clearTimeout(timer)
-  }, [config, onInvalidatePreview, onPreviewTask, run, selectedId])
+    return clearPreviewTimer
+  }, [
+    clearPreviewTimer,
+    onInvalidatePreview,
+    onPreviewTask,
+    previewConfiguration,
+    previewEnabled,
+    run,
+    selectedId,
+  ])
+
+  const startOutput = useCallback(async () => {
+    clearPreviewTimer()
+    onInvalidatePreview()
+    await run(onStartTasks)
+  }, [clearPreviewTimer, onInvalidatePreview, onStartTasks, run])
 
   return (
     <div className="task-workspace">
@@ -100,7 +126,7 @@ export function TaskWorkspace({
         <button
           type="button"
           disabled={tasks.length === 0}
-          onClick={() => void run(onStartTasks)}
+          onClick={() => void startOutput()}
         >
           生成印框
         </button>

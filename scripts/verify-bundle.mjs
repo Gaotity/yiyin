@@ -57,8 +57,16 @@ function verifyConfig(config, root, errors) {
   }
   const permissionsPath = join(root, 'src-tauri', 'capabilities', 'main.json')
   const capability = JSON.parse(readFileSync(permissionsPath, 'utf8'))
-  if (!Array.isArray(capability.permissions) || capability.permissions.length) {
-    errors.push('generic capability permissions must remain empty')
+  const expectedPermissions = [
+    'core:event:allow-listen',
+    'core:event:allow-unlisten',
+  ]
+  if (
+    !Array.isArray(capability.permissions) ||
+    JSON.stringify(capability.permissions) !==
+      JSON.stringify(expectedPermissions)
+  ) {
+    errors.push('capabilities must expose only typed task event listening')
   }
   for (const icon of config.bundle?.icon ?? []) {
     if (!existsSync(resolve(root, 'src-tauri', icon))) {
@@ -142,7 +150,10 @@ function scanPayload(artifact, errors) {
     }
     const urls = contents.match(/https?:\/\/[^\s'"<>]+/g) ?? []
     for (const url of urls) {
-      if (!url.startsWith('http://ipc.localhost')) {
+      const isApplePlistDtd =
+        basename(lowerPath) === 'info.plist' &&
+        url === 'http://www.apple.com/dtds/propertylist-1.0.dtd'
+      if (!url.startsWith('http://ipc.localhost') && !isApplePlistDtd) {
         errors.push(`remote URL found: ${url}`)
       }
     }
@@ -191,11 +202,12 @@ function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
-function parseArgs(argv) {
+export function parseArgs(argv) {
+  const args = argv[0] === '--' ? argv.slice(1) : argv
   const options = {}
-  for (let index = 0; index < argv.length; index += 2) {
-    const key = argv[index]
-    const value = argv[index + 1]
+  for (let index = 0; index < args.length; index += 2) {
+    const key = args[index]
+    const value = args[index + 1]
     if (!key?.startsWith('--') || !value) {
       throw new Error('Expected --platform <value> --artifact <path>')
     }
