@@ -90,6 +90,24 @@ jobs:
         env:
           YIYIN_E2E_FIXTURE_DIR: ${{ runner.temp }}\yiyin-e2e-fixtures
         run: |
+          echo "== runtime versions =="
+          msedgedriver.exe --version || true
+          powershell.exe -NoProfile -Command "(Get-Item 'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe').VersionInfo.ProductVersion" || true
+          powershell.exe -NoProfile -Command "(Get-ItemProperty 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}' -ErrorAction SilentlyContinue).pv" || true
+          echo "== direct launch probe =="
+          "target/release/yiyin.exe" &
+          probe_pid=$!
+          sleep 8
+          if kill -0 "$probe_pid" 2>/dev/null; then
+            echo "probe: app still running after 8s"
+          else
+            probe_code=0
+            wait "$probe_pid" || probe_code=$?
+            echo "probe: app exited early with code $probe_code"
+          fi
+          taskkill //IM yiyin.exe //F || true
+          sleep 2
+          echo "== start tauri-driver =="
           edge_driver="$(command -v msedgedriver.exe || command -v msedgedriver)"
           "$HOME/.cargo/bin/tauri-driver.exe" --native-driver "$edge_driver" \
             > "$RUNNER_TEMP/tauri-driver.stdout.log" \
