@@ -77,7 +77,7 @@ jobs:
       - name: Build compile-time fixture binary
         env:
           TAURI_CONFIG: '{"app":{"windows":[{"label":"main","title":"壹印","width":900,"height":730,"minWidth":900,"minHeight":730,"maxWidth":900,"maxHeight":730,"resizable":false,"decorations":false,"devtools":false,"additionalBrowserArgs":"--remote-debugging-port=9222"}]}}'
-        run: cargo build -p yiyin-desktop --release --locked --features e2e-fixture
+        run: cargo build -p yiyin-desktop --release --locked --features e2e-fixture,tauri/custom-protocol
       - name: Prepare one CI fixture
         shell: pwsh
         run: |

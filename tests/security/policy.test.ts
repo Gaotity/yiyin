@@ -105,7 +105,7 @@ describe('dependency and desktop security policy', () => {
       'pnpm tauri build --bundles nsis\n      - name: Verify production package contents',
     )
     expect(packaging).toContain(
-      'cargo build -p yiyin-desktop --release --locked --features e2e-fixture',
+      'cargo build -p yiyin-desktop --release --locked --features e2e-fixture,tauri/custom-protocol',
     )
   })
 })
