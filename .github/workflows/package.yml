@@ -86,6 +86,7 @@ jobs:
         env:
           YIYIN_E2E_FIXTURE_DIR: ${{ runner.temp }}\yiyin-e2e-fixtures
           WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: --remote-debugging-port=9222
+          WEBVIEW2_USER_DATA_FOLDER: ${{ runner.temp }}\yiyin-webview2-udf
         run: |
           echo "== runtime versions =="
           msedgedriver.exe --version || true
