@@ -1,0 +1,3 @@
+# Paths are port currency; public snapshots never carry them
+
+`ResourceRecord` lives in the application layer yet carries `PathBuf` source paths, an `allowed_root`, and a MIME type — which looks like a layering violation. We examined it and decided to keep the shape deliberately: ports face the filesystem by design, so paths are the legitimate currency of port signatures and port-facing records. The invariant that actually matters is narrower and already holds — **public snapshots, events, and DTOs never carry paths** — with containment enforced by the registry on every resolve. Recorded so a future reader doesn't "fix" the deliberate asymmetry by pushing opaque handles through every port, or worse, relax it by leaking paths upward.
