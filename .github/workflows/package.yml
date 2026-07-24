@@ -85,23 +85,37 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force "$env:RUNNER_TEMP\yiyin-e2e-fixtures"
           Copy-Item "tests\fixtures\input\portrait-default.png" "$env:RUNNER_TEMP\yiyin-e2e-fixtures\portrait-default.png"
-      - name: Start tauri-driver
-        shell: pwsh
+      - name: Desktop W3C smoke
+        shell: bash
         env:
           YIYIN_E2E_FIXTURE_DIR: ${{ runner.temp }}\yiyin-e2e-fixtures
         run: |
-          $edgeDriver = (Get-Command msedgedriver.exe).Source
-          $startOptions = @{
-            FilePath = "$HOME\.cargo\bin\tauri-driver.exe"
-            ArgumentList = @("--native-driver", $edgeDriver)
-            RedirectStandardOutput = "$env:RUNNER_TEMP\tauri-driver.stdout.log"
-            RedirectStandardError = "$env:RUNNER_TEMP\tauri-driver.stderr.log"
-            PassThru = $true
-          }
-          $driver = Start-Process @startOptions
-          $driver.Id | Out-File "$env:RUNNER_TEMP\tauri-driver.pid"
-      - name: Desktop W3C smoke
-        run: pnpm smoke:w3c -- --application target/release/yiyin.exe
+          edge_driver="$(command -v msedgedriver.exe || command -v msedgedriver)"
+          "$HOME/.cargo/bin/tauri-driver.exe" --native-driver "$edge_driver" \
+            > "$RUNNER_TEMP/tauri-driver.stdout.log" \
+            2> "$RUNNER_TEMP/tauri-driver.stderr.log" &
+          driver_pid=$!
+          echo "$driver_pid" > "$RUNNER_TEMP/tauri-driver.pid"
+          ready=false
+          for _ in $(seq 1 60); do
+            if ! kill -0 "$driver_pid" 2>/dev/null; then
+              echo "tauri-driver exited before becoming ready"
+              break
+            fi
+            if curl -sf http://127.0.0.1:4444/status > /dev/null 2>&1; then
+              ready=true
+              break
+            fi
+            sleep 1
+          done
+          if [ "$ready" != true ]; then
+            echo "--- tauri-driver.stdout.log"
+            cat "$RUNNER_TEMP/tauri-driver.stdout.log" || true
+            echo "--- tauri-driver.stderr.log"
+            cat "$RUNNER_TEMP/tauri-driver.stderr.log" || true
+            exit 1
+          fi
+          pnpm smoke:w3c -- --application target/release/yiyin.exe
       - name: Stop tauri-driver
         if: always()
         shell: pwsh
@@ -109,7 +123,10 @@ jobs:
           if (Test-Path "$env:RUNNER_TEMP\tauri-driver.pid") {
             Stop-Process -Id (Get-Content "$env:RUNNER_TEMP\tauri-driver.pid") -Force -ErrorAction SilentlyContinue
           }
-          Stop-Process -Name msedgedriver, yiyin -Force -ErrorAction SilentlyContinue
+          Get-Process -Name tauri-driver, msedgedriver, yiyin -ErrorAction SilentlyContinue | ForEach-Object {
+            Write-Host "still running: $($_.Name) ($($_.Id))"
+          }
+          Stop-Process -Name tauri-driver, msedgedriver, yiyin -Force -ErrorAction SilentlyContinue
           foreach ($path in @(
             "$env:RUNNER_TEMP\tauri-driver.stdout.log",
             "$env:RUNNER_TEMP\tauri-driver.stderr.log"
