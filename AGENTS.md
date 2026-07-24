@@ -14,7 +14,7 @@ All coding work in this repo follows the [mattpocock/skills](https://github.com/
 
 ### Issue tracker
 
-Issues are tracked in GitHub Issues for this repo (via the `gh` CLI). See `docs/agents/issue-tracker.md`.
+GitHub Issues are disabled on this repo — tickets live as local files under `docs/tickets/<feature-slug>/`. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 

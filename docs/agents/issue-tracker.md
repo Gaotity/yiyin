@@ -1,4 +1,6 @@
-# Issue tracker: GitHub
+# Issue tracker: GitHub (Issues currently disabled — local files in effect)
+
+> **Repo override (2026-07):** GitHub Issues are **disabled** on `Gaotity/yiyin`. Until they are re-enabled, tickets live as **local files under `docs/tickets/<feature-slug>/`** — one file per ticket, numbered from `01` in dependency order, with "Blocked by" and "Status" recorded as text in each file (e.g. `docs/tickets/tauri-rust-rewrite/`). Skills that say "publish to the issue tracker" should write those files, not call `gh issue create`. If Issues are re-enabled later, the GitHub conventions below apply unchanged.
 
 Issues and PRDs for this repo live as GitHub issues. Use the `gh` CLI for all operations.
 
