@@ -75,6 +75,8 @@ jobs:
       - name: Verify production package contents
         run: pnpm verify:bundle -- --platform windows --artifact target/release/bundle
       - name: Build compile-time fixture binary
+        env:
+          TAURI_CONFIG: '{"app":{"windows":[{"label":"main","title":"壹印","width":900,"height":730,"minWidth":900,"minHeight":730,"maxWidth":900,"maxHeight":730,"resizable":false,"decorations":false,"devtools":false,"additionalBrowserArgs":"--remote-debugging-port=9222"}]}}'
         run: cargo build -p yiyin-desktop --release --locked --features e2e-fixture
       - name: Prepare one CI fixture
         shell: pwsh
@@ -85,8 +87,6 @@ jobs:
         shell: bash
         env:
           YIYIN_E2E_FIXTURE_DIR: ${{ runner.temp }}\yiyin-e2e-fixtures
-          WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: --remote-debugging-port=9222
-          WEBVIEW2_USER_DATA_FOLDER: ${{ runner.temp }}\yiyin-webview2-udf
         run: |
           echo "== runtime versions =="
           msedgedriver.exe --version || true

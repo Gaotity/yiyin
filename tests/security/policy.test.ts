@@ -156,7 +156,7 @@ describe('GitHub automation policy', () => {
     expect([ci, packaging].join('\n')).toContain('pnpm@11.13.0')
     expect([ci, codeql, packaging].join('\n')).toContain('1.97.0')
     expect(packaging).toContain('CARGO_DENY_VERSION:')
-    expect(packaging).toContain('WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS')
+    expect(packaging).toContain('TAURI_CONFIG')
     expect(packaging).not.toContain('src-tauri/target/')
     expect(packaging).toContain('target/release/bundle/macos/壹印.app')
     expect(packaging).toContain('target/release/yiyin.exe')
