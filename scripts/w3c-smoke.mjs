@@ -52,10 +52,12 @@ export async function runDesktopSmoke({
   }
   const endpoint = `/session/${sessionId}`
   try {
-    const title = await command('GET', `${endpoint}/title`)
-    if (title.value !== '壹印') {
-      throw new Error(`Unexpected window title: ${String(title.value)}`)
-    }
+    await waitFor(async () => {
+      const title = await command('GET', `${endpoint}/title`)
+      if (title.value !== '壹印') {
+        throw new Error(`Unexpected window title: ${String(title.value)}`)
+      }
+    }, 15_000)
     const rect = await command('GET', `${endpoint}/window/rect`)
     if (rect.value.width !== 900 || rect.value.height !== 730) {
       throw new Error(
