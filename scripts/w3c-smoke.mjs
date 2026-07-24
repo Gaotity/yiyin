@@ -34,7 +34,9 @@ export async function waitForDriver(command, timeout = 60_000) {
 export function createSession(command, application, debuggerAddress) {
   const capabilities = debuggerAddress
     ? { alwaysMatch: { 'ms:edgeOptions': { debuggerAddress } } }
-    : { alwaysMatch: { 'tauri:options': { application: resolve(application) } } }
+    : {
+        alwaysMatch: { 'tauri:options': { application: resolve(application) } },
+      }
   return command('POST', '/session', { capabilities }, 120_000)
 }
 
