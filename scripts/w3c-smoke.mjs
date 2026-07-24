@@ -26,33 +26,29 @@ export async function waitForDriver(command, timeout = 60_000) {
   await waitFor(async () => {
     const status = await command('GET', '/status', undefined, 5_000)
     if (status.value?.ready !== true) {
-      throw new Error('tauri-driver is not ready')
+      throw new Error('WebDriver is not ready')
     }
   }, timeout)
 }
 
-export function createSession(command, application) {
-  return command(
-    'POST',
-    '/session',
-    {
-      capabilities: {
-        alwaysMatch: {
-          'tauri:options': { application: resolve(application) },
-        },
-      },
-    },
-    120_000,
-  )
+export function createSession(command, application, debuggerAddress) {
+  const capabilities = debuggerAddress
+    ? { alwaysMatch: { 'ms:edgeOptions': { debuggerAddress } } }
+    : { alwaysMatch: { 'tauri:options': { application: resolve(application) } } }
+  return command('POST', '/session', { capabilities }, 120_000)
 }
 
-export async function runDesktopSmoke({ application, baseUrl }) {
+export async function runDesktopSmoke({
+  application,
+  baseUrl,
+  debuggerAddress,
+}) {
   const command = createW3cClient(baseUrl)
   await waitForDriver(command)
-  const session = await createSession(command, application)
+  const session = await createSession(command, application, debuggerAddress)
   const sessionId = session.value.sessionId ?? session.sessionId
   if (!sessionId) {
-    throw new Error('tauri-driver returned no session ID')
+    throw new Error('WebDriver returned no session ID')
   }
   const endpoint = `/session/${sessionId}`
   try {
@@ -160,6 +156,8 @@ export function parseArgs(argv) {
       options.application = value
     } else if (key === '--base-url') {
       options.baseUrl = value
+    } else if (key === '--debugger-address') {
+      options.debuggerAddress = value
     } else {
       throw new Error(`Unknown option: ${key}`)
     }

@@ -84,5 +84,5 @@ pnpm vitest run
 ```
 
 Production packages must be built without the `e2e-fixture` feature. That
-feature exists only for the Windows `tauri-driver` smoke job and adds no
+feature exists only for the Windows WebDriver smoke job and adds no
 command or path-bearing DTO.
