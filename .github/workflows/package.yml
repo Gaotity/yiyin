@@ -128,6 +128,8 @@ jobs:
             echo "remote debugging port 9222 never opened"
             exit 1
           fi
+          echo "== CDP targets =="
+          curl -s http://127.0.0.1:9222/json
           pnpm smoke:w3c -- --application target/release/yiyin.exe --debugger-address 127.0.0.1:9222
       - name: Stop WebDriver smoke processes
         if: always()
