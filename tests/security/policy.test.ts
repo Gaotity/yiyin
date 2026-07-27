@@ -256,26 +256,39 @@ describe('GitHub automation policy', () => {
     }
   })
 
-  it('groups minor and patch Dependabot updates within each ecosystem', () => {
-    const path = '.github/dependabot.yml'
+  it('configures Renovate per ecosystem and contains no auto-merge', () => {
+    expect(existsSync(join(root, '.github/dependabot.yml'))).toBe(false)
+    const path = 'renovate.json'
     expect(existsSync(join(root, path))).toBe(true)
     if (!existsSync(join(root, path))) {
       return
     }
-    const dependabot = read(path)
-    expect(
-      [...dependabot.matchAll(/package-ecosystem:\s*"([^"]+)"/g)].map(
-        (match) => match[1],
-      ),
-    ).toEqual(['npm', 'cargo', 'github-actions'])
-    expect(dependabot.match(/minor-and-patch:/g)?.length).toBe(3)
-    expect(dependabot.match(/applies-to: "version-updates"/g)?.length).toBe(3)
-    expect(dependabot.match(/patterns:\n\s+- "\*"/g)?.length).toBe(3)
-    expect(dependabot.match(/update-types:/g)?.length).toBe(3)
-    expect(dependabot.match(/- "minor"/g)?.length).toBe(3)
-    expect(dependabot.match(/- "patch"/g)?.length).toBe(3)
-    expect(dependabot).not.toContain('- "major"')
-    expect(dependabot.toLowerCase()).not.toContain('auto-merge')
+    const renovate = JSON.parse(read(path)) as {
+      extends?: string[]
+      labels?: string[]
+      packageRules?: {
+        matchManagers?: string[]
+        matchUpdateTypes?: string[]
+        groupName?: string
+      }[]
+    }
+    expect(renovate.extends).toContain('config:recommended')
+    expect(renovate.labels).toContain('dependencies')
+    const rules = renovate.packageRules ?? []
+    expect(rules.flatMap((rule) => rule.matchManagers ?? [])).toEqual([
+      'npm',
+      'cargo',
+      'github-actions',
+      'npm',
+      'cargo',
+      'github-actions',
+    ])
+    const groups = rules.filter((rule) => rule.groupName)
+    expect(groups).toHaveLength(3)
+    for (const group of groups) {
+      expect(group.matchUpdateTypes).toEqual(['minor', 'patch'])
+    }
+    expect(read(path).toLowerCase()).not.toContain('automerge')
   })
 
   it('uses only the internal fetch-based W3C smoke client', () => {
