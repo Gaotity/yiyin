@@ -6,6 +6,11 @@ cd "$repository_root"
 
 metadata="$(cargo metadata --format-version 1 --no-deps)"
 
+command -v rg >/dev/null || {
+  echo "ripgrep (rg) is required for the production-purity source scan" >&2
+  exit 1
+}
+
 jq -e '
   .packages[]
   | select(.name == "yiyin-domain")
