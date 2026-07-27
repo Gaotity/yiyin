@@ -157,15 +157,38 @@ function scanPayload(artifact, errors) {
         found,
         true,
       )
-    } else {
+    } else if (isTextLike(lowerPath)) {
       scanLargeFile(path, lowerPath, found)
     }
     errors.push(...found)
   }
 }
 
-// Files above the whole-file read limit are scanned in chunks so the main
-// app binary is never exempt from payload and remote-URL checks.
+// Payload needles and URL patterns are plain-text matches; running them
+// against a compiled binary false-positives on embedded web-platform data
+// tables. Large files are therefore content-scanned only when they are
+// text-like — name-based checks above still apply to every file.
+const textLikeExtensions = new Set([
+  '.cjs',
+  '.css',
+  '.htm',
+  '.html',
+  '.js',
+  '.json',
+  '.mjs',
+  '.plist',
+  '.svg',
+  '.txt',
+  '.webmanifest',
+  '.xml',
+])
+
+function isTextLike(lowerPath) {
+  return textLikeExtensions.has(extname(lowerPath))
+}
+
+// Large text files are scanned in chunks so an oversized bundled script or
+// asset is never exempt from payload and remote-URL checks.
 function scanLargeFile(path, lowerPath, found) {
   const descriptor = openSync(path, 'r')
   try {

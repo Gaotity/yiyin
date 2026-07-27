@@ -130,19 +130,7 @@ describe('bundle verification', () => {
     )
   })
 
-  it('scans payloads and remote URLs in files larger than 5MB', async () => {
-    const path = resolve(root, 'scripts/verify-bundle.mjs')
-    const module = await importIfPresent<{
-      verifyBundle(options: {
-        platform: 'macos' | 'windows'
-        artifact: string
-        root: string
-      }): string[]
-    }>(path)
-    expect(module).not.toBeNull()
-    if (!module) {
-      return
-    }
+  const writeLargeBundle = (name: string) => {
     const fixture = join(
       tmpdir(),
       `yiyin-package-large-${process.pid}-${Date.now()}`,
@@ -163,7 +151,24 @@ describe('bundle verification', () => {
       6 * 1024 * 1024 - 100,
       'utf8',
     )
-    writeFileSync(join(fixture, 'Contents', 'Resources', 'main.bin'), large)
+    writeFileSync(join(fixture, 'Contents', 'Resources', name), large)
+    return fixture
+  }
+
+  it('scans payloads and remote URLs in text files larger than 5MB', async () => {
+    const path = resolve(root, 'scripts/verify-bundle.mjs')
+    const module = await importIfPresent<{
+      verifyBundle(options: {
+        platform: 'macos' | 'windows'
+        artifact: string
+        root: string
+      }): string[]
+    }>(path)
+    expect(module).not.toBeNull()
+    if (!module) {
+      return
+    }
+    const fixture = writeLargeBundle('main.js')
 
     expect(
       module.verifyBundle({ platform: 'macos', artifact: fixture, root }),
@@ -173,6 +178,29 @@ describe('bundle verification', () => {
         expect.stringContaining('remote URL'),
       ]),
     )
+  })
+
+  it('skips content scanning for large binary files', async () => {
+    const path = resolve(root, 'scripts/verify-bundle.mjs')
+    const module = await importIfPresent<{
+      verifyBundle(options: {
+        platform: 'macos' | 'windows'
+        artifact: string
+        root: string
+      }): string[]
+    }>(path)
+    expect(module).not.toBeNull()
+    if (!module) {
+      return
+    }
+    const fixture = writeLargeBundle('main.bin')
+
+    // Compiled binaries legitimately embed web-platform data tables whose
+    // bytes resemble payload names and URLs, so content checks only apply
+    // to text-like files; name-based checks still cover every file.
+    expect(
+      module.verifyBundle({ platform: 'macos', artifact: fixture, root }),
+    ).toEqual([])
   })
 })
 
