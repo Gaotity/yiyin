@@ -11,9 +11,11 @@ React is the presentation layer inside the system WebView.
 ## Origin and attribution
 
 This project is based on [ggchivalrous/yiyin](https://github.com/ggchivalrous/yiyin),
-originally created by ggchivalrous and licensed under `GPL-3.0-only`. It is
-now developed as an independent repository under the same license; see
-[NOTICE](NOTICE) for copyright attribution.
+originally created by ggchivalrous. The upstream repository ships the
+GPL-3.0 text as its LICENSE file, while its `package.json` metadata declares
+MIT; see [NOTICE](NOTICE) for details and copyright attribution. This fork is
+developed independently under `GPL-3.0-only`, consistent with the upstream
+LICENSE text.
 
 ## Features
 

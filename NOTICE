@@ -6,7 +6,12 @@ https://github.com/ggchivalrous/yiyin.
 
 Original work:
   Copyright (C) 2023 ggchivalrous and contributors
-  Licensed under the GNU General Public License, version 3 (GPL-3.0-only).
+  The upstream repository ships the GNU General Public License, version 3,
+  as its LICENSE file and is classified by GitHub as GPL-3.0. However,
+  the upstream package.json metadata conflictingly declares
+  "license": "MIT", and this conflict was never resolved upstream. This
+  fork treats the GPL-3.0 LICENSE text as the governing terms for the
+  original work.
 
 Modifications in this fork (https://github.com/Gaotity/yiyin):
   Copyright (C) 2026 Gaotity
