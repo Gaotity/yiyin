@@ -55,7 +55,7 @@ Replace the entire runtime in one clean cutover: **Tauri 2 + Rust + React**.
 
 ### `yiyin-domain` — pure rules
 
-- Pure entities, value objects, invariants, state transitions, and renderer-agnostic render plans. No dependency on Tauri, Tokio, serde, filesystem, image codecs, font engines, UUIDs, or clocks. Never serializes itself, never emits events.
+- Pure entities, value objects, invariants, state transitions, and renderer-agnostic render plans. Production code has no dependency on Tauri, Tokio, serde, filesystem, image codecs, font engines, UUIDs, or clocks. Never serializes itself, never emits events. Dev-only test dependencies may parse the frozen legacy fixtures.
 - Types: `Config`, `RenderOptions`, `Template`, `TemplateField`, `FontSpec`, normalized `Metadata`; `ResourceId`, `TaskId`, `OutputDirectory`, `ImageDimensions`, `ImageDensity`, `Quality` and validated newtypes (`TryFrom`, private fields); `TaskState` with only legal transitions; `RenderRequest`, `RenderPlan`, `RenderStage`; `OutputNameResolver`. Invalid ranges and illegal task states are unrepresentable after construction.
 - Preserves v1.6 defaults exactly: quality `100`, radius `2.1`, shadow `6`, main-image width `90`, font `PingFang SC`, etc. `origin_wh_output` stays in the schema for compatibility but has no geometric effect.
 - Exact geometry contract: explicit-ratio → portrait-to-landscape swap → main-image width expansion → minimum/shadow top margin → three-quarter text spacing → 2.7% bottom text offset → vertical centering → radius/shadow percentage rules → shadow intermediate plane capped at `10240`. Every `ceil/floor/round` is a named helper; integer rounding is part of the contract.

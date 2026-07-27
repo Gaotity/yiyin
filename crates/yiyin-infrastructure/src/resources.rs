@@ -96,16 +96,6 @@ impl ResourceRegistry {
         if !canonical.starts_with(&allowed_root) {
             return Err(ApplicationError::forbidden());
         }
-        if kind == ResourceKind::Preview {
-            // Preview files are deterministic per task, so a newly published
-            // preview supersedes the previous record pointing at the same file.
-            self.records
-                .write()
-                .map_err(|_| ApplicationError::internal("resource registry lock poisoned"))?
-                .retain(|_, record| {
-                    record.kind() != ResourceKind::Preview || record.source() != canonical
-                });
-        }
         let record = build_record(
             self.next_resource_id(),
             kind,
@@ -114,7 +104,21 @@ impl ResourceRegistry {
             &inspected,
             allowed_root,
         );
-        self.insert(record)
+        let mut records = self
+            .records
+            .write()
+            .map_err(|_| ApplicationError::internal("resource registry lock poisoned"))?;
+        if kind == ResourceKind::Preview {
+            // Preview files are deterministic per task, so a newly published
+            // preview supersedes the previous record pointing at the same
+            // file. Removal and insertion stay in one critical section so
+            // overlapping publications cannot leave duplicate records.
+            records.retain(|_, existing| {
+                existing.kind() != ResourceKind::Preview || existing.source() != record.source()
+            });
+        }
+        records.insert(record.id().clone(), record.clone());
+        Ok(record)
     }
 
     /// Registers an image that the Rust composition root placed in application-owned storage.

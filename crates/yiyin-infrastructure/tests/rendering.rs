@@ -26,6 +26,19 @@ impl CancellationProbe for AlwaysCancelled {
     }
 }
 
+/// Cancels once the deterministic preview file exists, which happens right
+/// after the atomic publish rename — modelling a preview that is superseded
+/// between publishing its file and registering its resource record.
+struct CancelOncePublished {
+    path: PathBuf,
+}
+
+impl CancellationProbe for CancelOncePublished {
+    fn is_cancelled(&self) -> bool {
+        self.path.exists()
+    }
+}
+
 struct Harness {
     temp: tempfile::TempDir,
     registry: Arc<ResourceRegistry>,
@@ -199,6 +212,46 @@ fn a_new_preview_replaces_the_previous_preview_record() {
             .unwrap_err()
             .code(),
         ErrorCode::ResourceNotFound
+    );
+}
+
+#[test]
+fn a_superseded_preview_never_registers_a_record() {
+    let harness = Harness::new();
+    let request = harness.request("landscape-default.jpg", true);
+    let destination = harness
+        .temp
+        .path()
+        .join("preview")
+        .join(format!("{}.jpg", request.task_id().as_str()));
+    let probe = CancelOncePublished {
+        path: destination.clone(),
+    };
+
+    let error = harness
+        .renderer
+        .render(&request, &probe, &mut |_| {})
+        .expect_err("superseded preview must not complete");
+
+    assert_eq!(error.code(), ErrorCode::Cancelled);
+    assert!(
+        harness
+            .registry
+            .snapshot()
+            .iter()
+            .all(|record| record.kind() != ResourceKind::Preview),
+        "a superseded preview must not register (and evict) a preview record"
+    );
+    // The deterministic file is left in place for the current preview.
+    assert!(destination.exists());
+
+    let current = harness
+        .renderer
+        .render(&request, &NeverCancelled, &mut |_| {})
+        .expect("current preview");
+    assert!(
+        harness.registry.resolve(current.resource().id()).is_ok(),
+        "the current preview's record must resolve"
     );
 }
 

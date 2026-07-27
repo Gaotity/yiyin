@@ -265,6 +265,11 @@ impl TaskQueue for FakeQueue {
 
     fn preview(&self, request: RenderRequest) -> Result<(), ApplicationError> {
         let mut state = self.0.lock().expect("queue lock");
+        // Mirrors the real queue: starting a preview clears the task's
+        // tracked output name.
+        state
+            .cleared_output
+            .insert(request.task_id().as_str().to_owned());
         if let Some(previous) = state.preview.replace(request) {
             state.superseded_previews.push(previous.task_id().clone());
         }
@@ -504,6 +509,7 @@ fn newer_preview_supersedes_the_previous_preview_without_reserving_output() {
         harness.config.clone(),
         harness.resources.clone(),
         harness.metadata.clone(),
+        harness.output.clone(),
         harness.queue.clone(),
     );
 
@@ -516,6 +522,29 @@ fn newer_preview_supersedes_the_previous_preview_without_reserving_output() {
     assert_eq!(request.options().quality.get(), 70);
     assert_eq!(harness.queue.superseded_previews(), [first]);
     assert!(harness.output.reservations().is_empty());
+}
+
+#[test]
+fn previewing_a_failed_export_releases_its_reservation_for_the_retry() {
+    let harness = Harness::with_quality(100);
+    let id = harness.register("task-1", "photo.png");
+    let preview = PreviewTask::new(
+        harness.config.clone(),
+        harness.resources.clone(),
+        harness.metadata.clone(),
+        harness.output.clone(),
+        harness.queue.clone(),
+    );
+
+    harness.start().execute(std::slice::from_ref(&id)).unwrap();
+    harness.queue.fail(&id);
+    preview.execute(&id).unwrap();
+    harness.start().execute(std::slice::from_ref(&id)).unwrap();
+
+    // The failed export's reservation is released before the preview starts,
+    // so the retry reuses the original name instead of photo-2.jpg.
+    assert_eq!(harness.output.releases(), ["photo.jpg"]);
+    assert_eq!(harness.queue.export_names(&id), ["photo.jpg", "photo.jpg"]);
 }
 
 #[test]

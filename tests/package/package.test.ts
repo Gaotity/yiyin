@@ -180,6 +180,45 @@ describe('bundle verification', () => {
     )
   })
 
+  it('terminates URL matches at NUL bytes inside binary-like content', async () => {
+    const path = resolve(root, 'scripts/verify-bundle.mjs')
+    const module = await importIfPresent<{
+      verifyBundle(options: {
+        platform: 'macos' | 'windows'
+        artifact: string
+        root: string
+      }): string[]
+    }>(path)
+    expect(module).not.toBeNull()
+    if (!module) {
+      return
+    }
+    const fixture = join(
+      tmpdir(),
+      `yiyin-package-nul-${process.pid}-${Date.now()}`,
+      '壹印.app',
+    )
+    mkdirSync(join(fixture, 'Contents', 'MacOS'), { recursive: true })
+    mkdirSync(join(fixture, 'Contents', 'Resources'), { recursive: true })
+    writeFileSync(
+      join(fixture, 'Contents', 'Info.plist'),
+      plist('壹印', 'io.github.gaotity.yiyin', '1.6.0'),
+    )
+    writeFileSync(join(fixture, 'Contents', 'MacOS', '壹印'), 'native-binary')
+    writeFileSync(join(fixture, 'Contents', 'Resources', 'icon.icns'), 'icon')
+    // The allowed IPC URL is still allowed when a NUL-terminated string is
+    // followed by binary bytes; the match must stop at the NUL.
+    const embedded = Buffer.concat([
+      Buffer.from('http://ipc.localhost\0', 'utf8'),
+      Buffer.alloc(16, 0xff),
+    ])
+    writeFileSync(join(fixture, 'Contents', 'Resources', 'main.js'), embedded)
+
+    expect(
+      module.verifyBundle({ platform: 'macos', artifact: fixture, root }),
+    ).toEqual([])
+  })
+
   it('skips content scanning for large binary files', async () => {
     const path = resolve(root, 'scripts/verify-bundle.mjs')
     const module = await importIfPresent<{

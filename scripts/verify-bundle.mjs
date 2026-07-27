@@ -226,7 +226,10 @@ function scanText(text, path, lowerPath, found, flush) {
       found.add(`forbidden payload ${payload}: ${path}`)
     }
   }
-  const urlPattern = /https?:\/\/[^\s'"<>]+/g
+  // Match only printable URL characters (RFC 3986 unreserved + reserved +
+  // percent): NUL and other binary bytes terminate the match, so an allowed
+  // IPC URL embedded in a binary is still recognized.
+  const urlPattern = /https?:\/\/[A-Za-z0-9\-._~:/?#[\]@!$&()*+,;=%]+/g
   for (;;) {
     const match = urlPattern.exec(text)
     if (match === null) {

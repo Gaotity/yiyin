@@ -316,6 +316,14 @@ impl RustImageRenderer {
             let _ = remove_if_present(self.filesystem.as_ref(), &destination);
             return Err(internal_io(error));
         }
+        if request.is_preview()
+            && let Err(error) = ensure_active(cancellation)
+        {
+            // A superseded preview must not register a record, or it could
+            // evict the current preview's record; the deterministic file is
+            // left in place for whichever preview publishes next.
+            return Err(error);
+        }
         let record =
             match self
                 .resources
