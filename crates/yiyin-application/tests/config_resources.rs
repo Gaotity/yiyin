@@ -4,11 +4,11 @@ use std::{
 };
 
 use yiyin_application::{
-    ApplicationError, Bootstrap, CancellationProbe, Clock, ConfigRepository, ErrorCode,
-    IdGenerator, ImageRenderer, ImportOutcome, MetadataReader, OutputDirectoryGateway,
-    ReadTaskExif, RegisterFont, RegisterImages, RegisterOverlay, RegisteredTask, RemoveFont,
-    RenderResult, ResetConfig, ResourceRecord, ResourceRepository, TaskEventSink, TaskQueue,
-    TaskSnapshot, UpdateConfig,
+    ApplicationError, Bootstrap, CancellationProbe, ConfigRepository, ErrorCode, IdGenerator,
+    ImageRenderer, ImportOutcome, MetadataReader, OutputDirectoryGateway, ReadTaskExif,
+    RegisterFont, RegisterImages, RegisterOverlay, RegisteredTask, RemoveFont, RenderResult,
+    ResetConfig, ResourceRecord, ResourceRepository, TaskEventSink, TaskQueue, TaskSnapshot,
+    UpdateConfig,
 };
 use yiyin_domain::{
     BuiltInField, Config, ImageDimensions, Metadata, RenderRequest, RenderStage, ResourceId,
@@ -156,6 +156,10 @@ impl TaskQueue for FakeQueue {
     }
 
     fn cancel(&self, _id: &TaskId) -> Result<(), ApplicationError> {
+        Ok(())
+    }
+
+    fn clear_output_name(&self, _id: &TaskId) -> Result<(), ApplicationError> {
         Ok(())
     }
 
@@ -377,7 +381,6 @@ fn stable_error_codes_are_exact() {
 
 // Compile-time coverage for the remaining object-safe ports.
 fn _ports_are_object_safe(
-    _clock: &dyn Clock,
     _output: &dyn OutputDirectoryGateway,
     _cancellation: &dyn CancellationProbe,
     _renderer: &dyn ImageRenderer,

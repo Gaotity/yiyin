@@ -7,6 +7,8 @@ use crate::{
     state::AppState,
 };
 
+const DROP_ERROR_EVENT: &str = "drop-error";
+
 pub const PLUGIN_ORDER: [&str; 5] = [
     "single-instance",
     "log",
@@ -104,6 +106,11 @@ pub fn builder() -> tauri::Builder<Wry> {
                                         "drag-and-drop registration failed: {}",
                                         error.message
                                     );
+                                    if let Err(emit_error) = handle.emit(DROP_ERROR_EVENT, error) {
+                                        log::error!(
+                                            "failed to emit drag-and-drop error: {emit_error}"
+                                        );
+                                    }
                                 }
                             }
                         });

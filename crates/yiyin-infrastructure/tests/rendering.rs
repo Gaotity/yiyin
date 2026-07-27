@@ -171,6 +171,38 @@ fn preview_uses_quality_seventy_without_publishing_an_export() {
 }
 
 #[test]
+fn a_new_preview_replaces_the_previous_preview_record() {
+    let harness = Harness::new();
+    let request = harness.request("landscape-default.jpg", true);
+
+    let first = harness
+        .renderer
+        .render(&request, &NeverCancelled, &mut |_| {})
+        .expect("first preview");
+    let second = harness
+        .renderer
+        .render(&request, &NeverCancelled, &mut |_| {})
+        .expect("second preview");
+
+    let previews = harness
+        .registry
+        .snapshot()
+        .into_iter()
+        .filter(|record| record.kind() == ResourceKind::Preview)
+        .collect::<Vec<_>>();
+    assert_eq!(previews.len(), 1);
+    assert_eq!(previews[0].id(), second.resource().id());
+    assert_eq!(
+        harness
+            .registry
+            .resolve(first.resource().id())
+            .unwrap_err()
+            .code(),
+        ErrorCode::ResourceNotFound
+    );
+}
+
+#[test]
 fn exif_orientation_is_applied_before_geometry() {
     let harness = Harness::new();
     let request = harness.request("exif-orientation-6.jpg", false);

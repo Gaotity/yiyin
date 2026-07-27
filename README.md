@@ -20,12 +20,22 @@ React is the presentation layer inside the system WebView.
 
 ## Install and run
 
-Download the unsigned package for your platform from the project releases.
-The migration release remains version `1.6.0`.
+Packages are not currently published as downloadable releases. Build the
+application from source instead. Install the toolchains listed in the
+Development section, then run:
 
-On macOS, move `壹印.app` to `/Applications`. Because the package is unsigned,
-macOS may quarantine it. Inspect the downloaded artifact, then remove the
-quarantine attribute if you trust it:
+```bash
+pnpm install --frozen-lockfile
+pnpm tauri build
+```
+
+This produces unsigned macOS or Windows packages under
+`src-tauri/target/release/bundle/`. CI package runs also upload temporary
+unsigned artifacts that expire with the run.
+
+On macOS, move `壹印.app` to `/Applications`. Because the bundle is unsigned,
+macOS may quarantine a locally built or CI-artifact copy. Inspect the
+artifact, then remove the quarantine attribute if you trust it:
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/壹印.app

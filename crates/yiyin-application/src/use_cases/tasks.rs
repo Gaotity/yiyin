@@ -1,6 +1,6 @@
 use std::{collections::BTreeSet, sync::Arc};
 
-use yiyin_domain::{Config, OutputNameResolver, Quality, RenderRequest, TaskId};
+use yiyin_domain::{Config, OutputNameResolver, Quality, RenderRequest, TaskId, TaskState};
 
 use crate::{
     ApplicationError, ConfigRepository, MetadataReader, OutputDirectoryGateway, RegisteredTask,
@@ -84,6 +84,7 @@ impl StartTasks {
         registered: Vec<RegisteredTask>,
         config: &Config,
     ) -> Result<Vec<TaskSnapshot>, ApplicationError> {
+        self.release_terminal_reservations()?;
         let mut existing_names = self.output.existing_names()?;
         let mut requests = Vec::with_capacity(registered.len());
         for task in registered {
@@ -103,6 +104,23 @@ impl StartTasks {
             self.tasks.enqueue(request)?;
         }
         Ok(self.tasks.snapshot())
+    }
+
+    /// Releases reservations held by tasks that failed or were cancelled so a
+    /// later export can reuse the original output name. Each reservation is
+    /// released exactly once: the snapshot's output name is cleared after the
+    /// release so a later start cannot free a name that another task has since
+    /// reserved.
+    fn release_terminal_reservations(&self) -> Result<(), ApplicationError> {
+        for task in self.tasks.snapshot() {
+            if matches!(task.state(), TaskState::Failed | TaskState::Cancelled)
+                && let Some(output_name) = task.output_name()
+            {
+                self.output.release(output_name)?;
+                self.tasks.clear_output_name(task.id())?;
+            }
+        }
+        Ok(())
     }
 }
 

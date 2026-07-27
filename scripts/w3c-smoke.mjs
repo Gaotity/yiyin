@@ -1,4 +1,3 @@
-import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 const elementKey = 'element-6066-11e4-a52e-4f735466cecf'
@@ -31,23 +30,17 @@ export async function waitForDriver(command, timeout = 60_000) {
   }, timeout)
 }
 
-export function createSession(command, application, debuggerAddress) {
-  const capabilities = debuggerAddress
-    ? { alwaysMatch: { 'ms:edgeOptions': { debuggerAddress } } }
-    : {
-        alwaysMatch: { 'tauri:options': { application: resolve(application) } },
-      }
+export function createSession(command, debuggerAddress) {
+  const capabilities = {
+    alwaysMatch: { 'ms:edgeOptions': { debuggerAddress } },
+  }
   return command('POST', '/session', { capabilities }, 120_000)
 }
 
-export async function runDesktopSmoke({
-  application,
-  baseUrl,
-  debuggerAddress,
-}) {
+export async function runDesktopSmoke({ baseUrl, debuggerAddress }) {
   const command = createW3cClient(baseUrl)
   await waitForDriver(command)
-  const session = await createSession(command, application, debuggerAddress)
+  const session = await createSession(command, debuggerAddress)
   const sessionId = session.value.sessionId ?? session.sessionId
   if (!sessionId) {
     throw new Error('WebDriver returned no session ID')
@@ -154,11 +147,11 @@ export function parseArgs(argv) {
     const key = args[index]
     const value = args[index + 1]
     if (!key?.startsWith('--') || !value) {
-      throw new Error('Expected --application <path> [--base-url <url>]')
+      throw new Error(
+        'Expected --debugger-address <host:port> [--base-url <url>]',
+      )
     }
-    if (key === '--application') {
-      options.application = value
-    } else if (key === '--base-url') {
+    if (key === '--base-url') {
       options.baseUrl = value
     } else if (key === '--debugger-address') {
       options.debuggerAddress = value
@@ -166,8 +159,8 @@ export function parseArgs(argv) {
       throw new Error(`Unknown option: ${key}`)
     }
   }
-  if (!options.application) {
-    throw new Error('Expected --application <path>')
+  if (!options.debuggerAddress) {
+    throw new Error('Expected --debugger-address <host:port>')
   }
   return options
 }

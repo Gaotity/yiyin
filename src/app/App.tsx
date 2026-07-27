@@ -71,11 +71,13 @@ export function App({ client = tauriClient }: AppProps) {
             config={controller.snapshot.config}
             tasks={controller.snapshot.tasks}
             selectedId={controller.selectedTaskId}
+            dropError={controller.dropError}
             readExif={controller.readTaskExif}
             onSelect={controller.selectTask}
             onChooseImages={controller.chooseImages}
             onStartTasks={controller.startTasks}
             onPreviewTask={controller.previewTask}
+            onCancelTask={controller.cancelTask}
             onInvalidatePreview={controller.invalidatePreviewRequests}
             onChooseOutput={controller.chooseOutputDirectory}
             onOpenOutput={controller.openOutputDirectory}
@@ -103,6 +105,7 @@ export function App({ client = tauriClient }: AppProps) {
         onSave={controller.updateConfig}
       />
       <Footer
+        version={snapshot.config.version}
         onOpen={(destination) => void client.openExternalUrl(destination)}
       />
     </div>

@@ -1,8 +1,11 @@
 import {
+  closeSync,
   existsSync,
   lstatSync,
+  openSync,
   readdirSync,
   readFileSync,
+  readSync,
   statSync,
 } from 'node:fs'
 import { basename, extname, join, resolve } from 'node:path'
@@ -15,6 +18,11 @@ const expected = {
 }
 const forbiddenPayloads = ['electron', 'sharp', 'svelte', 'db-ui']
 const forbiddenSidecars = ['node', 'node.exe', 'ffmpeg', 'exiftool']
+const wholeFileScanLimit = 5 * 1024 * 1024
+const scanChunkSize = 1024 * 1024
+const maxPayloadLength = Math.max(
+  ...forbiddenPayloads.map((payload) => payload.length),
+)
 
 export function verifyBundle({ platform, artifact, root = process.cwd() }) {
   const errors = []
@@ -60,6 +68,7 @@ function verifyConfig(config, root, errors) {
   const expectedPermissions = [
     'core:event:allow-listen',
     'core:event:allow-unlisten',
+    'core:window:allow-start-dragging',
   ]
   if (
     !Array.isArray(capability.permissions) ||
@@ -139,24 +148,81 @@ function scanPayload(artifact, errors) {
         errors.push(`forbidden sidecar found: ${sidecar}`)
       }
     }
-    if (statSync(path).size > 5 * 1024 * 1024) {
-      continue
+    const found = new Set()
+    if (statSync(path).size <= wholeFileScanLimit) {
+      scanText(
+        readFileSync(path, 'utf8').toLowerCase(),
+        path,
+        lowerPath,
+        found,
+        true,
+      )
+    } else {
+      scanLargeFile(path, lowerPath, found)
     }
-    const contents = readFileSync(path, 'utf8').toLowerCase()
-    for (const payload of forbiddenPayloads) {
-      if (contents.includes(payload)) {
-        errors.push(`forbidden payload ${payload}: ${path}`)
+    errors.push(...found)
+  }
+}
+
+// Files above the whole-file read limit are scanned in chunks so the main
+// app binary is never exempt from payload and remote-URL checks.
+function scanLargeFile(path, lowerPath, found) {
+  const descriptor = openSync(path, 'r')
+  try {
+    const buffer = Buffer.alloc(scanChunkSize)
+    const decoder = new TextDecoder('utf-8')
+    let carry = ''
+    for (;;) {
+      const bytesRead = readSync(descriptor, buffer, 0, buffer.length, null)
+      if (bytesRead === 0) {
+        if (carry) {
+          scanText(carry, path, lowerPath, found, true)
+        }
+        return
       }
+      const chunk = decoder.decode(buffer.subarray(0, bytesRead), {
+        stream: true,
+      })
+      carry = scanText(
+        (carry + chunk).toLowerCase(),
+        path,
+        lowerPath,
+        found,
+        false,
+      )
     }
-    const urls = contents.match(/https?:\/\/[^\s'"<>]+/g) ?? []
-    for (const url of urls) {
-      const isApplePlistDtd =
-        basename(lowerPath) === 'info.plist' &&
-        url === 'http://www.apple.com/dtds/propertylist-1.0.dtd'
-      if (!isAllowedIpcUrl(url) && !isApplePlistDtd) {
-        errors.push(`remote URL found: ${url}`)
-      }
+  } finally {
+    closeSync(descriptor)
+  }
+}
+
+// Returns the unterminated tail that must be rescanned with the next chunk.
+function scanText(text, path, lowerPath, found, flush) {
+  for (const payload of forbiddenPayloads) {
+    if (text.includes(payload)) {
+      found.add(`forbidden payload ${payload}: ${path}`)
     }
+  }
+  const urlPattern = /https?:\/\/[^\s'"<>]+/g
+  for (;;) {
+    const match = urlPattern.exec(text)
+    if (match === null) {
+      break
+    }
+    if (!flush && match.index + match[0].length === text.length) {
+      return text.slice(match.index)
+    }
+    reportRemoteUrl(match[0], lowerPath, found)
+  }
+  return text.slice(-(maxPayloadLength - 1))
+}
+
+function reportRemoteUrl(url, lowerPath, found) {
+  const isApplePlistDtd =
+    basename(lowerPath) === 'info.plist' &&
+    url === 'http://www.apple.com/dtds/propertylist-1.0.dtd'
+  if (!isAllowedIpcUrl(url) && !isApplePlistDtd) {
+    found.add(`remote URL found: ${url}`)
   }
 }
 

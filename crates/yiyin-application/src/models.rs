@@ -122,6 +122,7 @@ pub struct TaskSnapshot {
     progress: u8,
     preview: bool,
     resource: Option<ResourceSnapshot>,
+    output_name: Option<String>,
 }
 
 impl TaskSnapshot {
@@ -134,6 +135,7 @@ impl TaskSnapshot {
             progress: 0,
             preview: false,
             resource: None,
+            output_name: None,
         }
     }
 
@@ -152,12 +154,19 @@ impl TaskSnapshot {
             progress,
             preview,
             resource: None,
+            output_name: None,
         }
     }
 
     #[must_use]
     pub fn with_resource(mut self, resource: ResourceSnapshot) -> Self {
         self.resource = Some(resource);
+        self
+    }
+
+    #[must_use]
+    pub fn with_output_name(mut self, output_name: impl Into<String>) -> Self {
+        self.output_name = Some(output_name.into());
         self
     }
 
@@ -189,6 +198,11 @@ impl TaskSnapshot {
     #[must_use]
     pub const fn resource(&self) -> Option<&ResourceSnapshot> {
         self.resource.as_ref()
+    }
+
+    #[must_use]
+    pub fn output_name(&self) -> Option<&str> {
+        self.output_name.as_deref()
     }
 }
 

@@ -33,6 +33,7 @@ export interface PlatformClient {
   onTaskStatus(
     listener: (event: TaskStatusEventDto) => void,
   ): Promise<() => void>
+  onDropError(listener: (error: CommandErrorDto) => void): Promise<() => void>
 }
 
 const INTERNAL_ERROR: CommandErrorDto = {
@@ -93,6 +94,15 @@ export const tauriClient: PlatformClient = {
   async onTaskStatus(listener) {
     try {
       return await listen<TaskStatusEventDto>('task-status', ({ payload }) =>
+        listener(payload),
+      )
+    } catch (error) {
+      throw parseCommandError(error)
+    }
+  },
+  async onDropError(listener) {
+    try {
+      return await listen<CommandErrorDto>('drop-error', ({ payload }) =>
         listener(payload),
       )
     } catch (error) {

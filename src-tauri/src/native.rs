@@ -97,6 +97,14 @@ impl OutputDirectoryGateway for NativeOutputDirectory {
             .insert(file_name.to_owned());
         Ok(())
     }
+
+    fn release(&self, file_name: &str) -> Result<(), ApplicationError> {
+        self.reservations
+            .lock()
+            .map_err(|_| ApplicationError::internal("output reservations lock poisoned"))?
+            .remove(file_name);
+        Ok(())
+    }
 }
 
 #[must_use]

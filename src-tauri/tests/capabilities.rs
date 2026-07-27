@@ -15,6 +15,7 @@ fn main_capability_and_production_window_expose_no_generic_native_api() {
         &[
             serde_json::Value::String("core:event:allow-listen".to_owned()),
             serde_json::Value::String("core:event:allow-unlisten".to_owned()),
+            serde_json::Value::String("core:window:allow-start-dragging".to_owned()),
         ]
     );
     for forbidden in ["dialog:", "opener:", "fs:", "shell:", "http:"] {

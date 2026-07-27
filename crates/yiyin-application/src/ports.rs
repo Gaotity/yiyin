@@ -148,10 +148,7 @@ pub trait MetadataReader: Send + Sync {
 pub trait OutputDirectoryGateway: Send + Sync {
     fn existing_names(&self) -> Result<BTreeSet<String>, ApplicationError>;
     fn reserve(&self, file_name: &str) -> Result<(), ApplicationError>;
-}
-
-pub trait Clock: Send + Sync {
-    fn unix_millis(&self) -> u64;
+    fn release(&self, file_name: &str) -> Result<(), ApplicationError>;
 }
 
 pub trait IdGenerator: Send + Sync {
@@ -169,6 +166,7 @@ pub trait TaskQueue: Send + Sync {
     fn enqueue(&self, request: RenderRequest) -> Result<(), ApplicationError>;
     fn preview(&self, request: RenderRequest) -> Result<(), ApplicationError>;
     fn cancel(&self, id: &TaskId) -> Result<(), ApplicationError>;
+    fn clear_output_name(&self, id: &TaskId) -> Result<(), ApplicationError>;
     fn clear(&self) -> Result<(), ApplicationError>;
     fn shutdown(&self) -> Result<(), ApplicationError>;
     fn snapshot(&self) -> Vec<TaskSnapshot>;

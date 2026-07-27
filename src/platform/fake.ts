@@ -30,6 +30,7 @@ export interface FakePlatformHarness {
   client: PlatformClient
   calls: FakePlatformCalls
   emitTaskStatus(event: TaskStatusEventDto): void
+  emitDropError(error: CommandErrorDto): void
   resolveBootstrap(): void
   rejectNextBootstrap(error: CommandErrorDto): void
   setSnapshot(snapshot: BootstrapDto): void
@@ -80,6 +81,7 @@ export function createFakePlatformClient(
   let deferredResolve: ((value: BootstrapDto) => void) | undefined
   let nextBootstrapError: CommandErrorDto | undefined
   const listeners = new Set<(event: TaskStatusEventDto) => void>()
+  const dropErrorListeners = new Set<(error: CommandErrorDto) => void>()
   const calls: FakePlatformCalls = {
     bootstrap: 0,
     unlisten: 0,
@@ -184,6 +186,13 @@ export function createFakePlatformClient(
         calls.unlisten += 1
       })
     },
+    onDropError(listener) {
+      dropErrorListeners.add(listener)
+      return Promise.resolve(() => {
+        dropErrorListeners.delete(listener)
+        calls.unlisten += 1
+      })
+    },
   }
 
   return {
@@ -192,6 +201,11 @@ export function createFakePlatformClient(
     emitTaskStatus(event) {
       for (const listener of listeners) {
         listener(clone(event))
+      }
+    },
+    emitDropError(error) {
+      for (const listener of dropErrorListeners) {
+        listener(clone(error))
       }
     },
     resolveBootstrap() {
