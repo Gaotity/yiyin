@@ -47,6 +47,7 @@ struct TaskRecord {
     execution: u64,
     cancellation: Option<Arc<AtomicCancellation>>,
     resource: Option<ResourceSnapshot>,
+    output_name: Option<String>,
 }
 
 impl TaskRecord {
@@ -57,21 +58,26 @@ impl TaskRecord {
             execution: 0,
             cancellation: None,
             resource: None,
+            output_name: None,
         }
     }
 
     fn snapshot(&self) -> TaskSnapshot {
         let progress = self.status.stage().map_or(0, RenderStage::percent);
-        let snapshot = TaskSnapshot::new(
+        let mut snapshot = TaskSnapshot::new(
             self.registered.id().clone(),
             self.registered.display_name(),
             self.status.state(),
             progress,
             self.status.is_preview(),
         );
-        self.resource.as_ref().map_or(snapshot.clone(), |resource| {
-            snapshot.with_resource(resource.clone())
-        })
+        if let Some(output_name) = &self.output_name {
+            snapshot = snapshot.with_output_name(output_name.clone());
+        }
+        if let Some(resource) = &self.resource {
+            snapshot = snapshot.with_resource(resource.clone());
+        }
+        snapshot
     }
 }
 
@@ -381,6 +387,13 @@ impl TokioTaskQueue {
             .transition_to(TaskState::Queued)
             .map_err(|error| ApplicationError::internal(error.to_string()))?;
         record.resource = None;
+        // Previews never reserve an output name; clearing avoids releasing a
+        // name that a later export may have legitimately re-reserved.
+        record.output_name = if preview_request {
+            None
+        } else {
+            Some(request.output_name().to_owned())
+        };
         let cancellation = Arc::new(AtomicCancellation::new());
         record.cancellation = Some(Arc::clone(&cancellation));
         let execution = record.execution;
@@ -544,6 +557,18 @@ impl TaskQueue for TokioTaskQueue {
 
     fn clear(&self) -> Result<(), ApplicationError> {
         self.cancel_all(CancellationReason::Cleared, true)
+    }
+
+    fn clear_output_name(&self, id: &TaskId) -> Result<(), ApplicationError> {
+        let mut records = self
+            .shared
+            .records
+            .write()
+            .map_err(|_| ApplicationError::internal("task records lock poisoned"))?;
+        if let Some(record) = records.get_mut(id) {
+            record.output_name = None;
+        }
+        Ok(())
     }
 
     fn shutdown(&self) -> Result<(), ApplicationError> {

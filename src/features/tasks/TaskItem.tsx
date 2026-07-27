@@ -7,6 +7,7 @@ interface TaskItemProps {
   selected: boolean
   readExif: PlatformClient['readTaskExif']
   onSelect(id: string): void
+  onCancel(id: string): void
   onError(error: unknown): void
 }
 
@@ -24,6 +25,7 @@ export function TaskItem({
   selected,
   readExif,
   onSelect,
+  onCancel,
   onError,
 }: TaskItemProps) {
   const [metadata, setMetadata] = useState<MetadataDto | null>(null)
@@ -88,6 +90,15 @@ export function TaskItem({
               ? '无'
               : '读取中...'}
         </span>
+        {(task.state === 'queued' || task.state === 'running') && (
+          <button
+            type="button"
+            aria-label={`取消 ${task.displayName}`}
+            onClick={() => onCancel(task.id)}
+          >
+            取消
+          </button>
+        )}
         {metadata && (
           <button
             type="button"

@@ -1,14 +1,13 @@
-use std::{fs, path::PathBuf};
+#[path = "support/legacy_manifest.rs"]
+mod legacy_manifest;
+
+use std::{collections::BTreeMap, fs};
 
 use yiyin_application::{ErrorCode, MetadataReader};
-use yiyin_domain::{BuiltInField, ImageOrientation};
+use yiyin_domain::{BuiltInField, ImageOrientation, Metadata};
 use yiyin_infrastructure::{
     ExifMetadataReader, format_shutter, normalize_nikon_model, normalize_sony_model,
 };
-
-fn fixtures() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/input")
-}
 
 #[test]
 fn vendor_model_formatting_matches_the_legacy_template_formatter() {
@@ -26,35 +25,19 @@ fn shutter_formatting_preserves_fractional_and_whole_seconds() {
 }
 
 #[test]
-fn generic_exif_fields_are_normalized_from_real_fixture() {
-    let metadata = ExifMetadataReader
-        .read(&fixtures().join("landscape-default.jpg"))
-        .expect("read EXIF")
-        .expect("metadata");
+fn every_manifest_scenario_metadata_matches_the_frozen_capture() {
+    let manifest = legacy_manifest::load_manifest();
+    for scenario in &manifest.scenarios {
+        let metadata = read_scenario_metadata(&scenario.id);
+        assert_matches_frozen_capture(&scenario.id, &metadata);
+    }
+}
 
-    assert_eq!(metadata.value(BuiltInField::Make), Some("ACME CORPORATION"));
-    assert_eq!(metadata.value(BuiltInField::Model), Some("Camera One"));
-    assert_eq!(metadata.value(BuiltInField::LensMake), Some("ACME Optics"));
-    assert_eq!(metadata.value(BuiltInField::LensModel), Some("Prime 35"));
-    assert_eq!(metadata.value(BuiltInField::FNumber), Some("2.8"));
-    assert_eq!(metadata.value(BuiltInField::Iso), Some("200"));
-    assert_eq!(metadata.value(BuiltInField::FocalLength), Some("35"));
-    assert_eq!(
-        metadata.value(BuiltInField::FocalLengthIn35mmFormat),
-        Some("52")
-    );
-    assert_eq!(metadata.value(BuiltInField::ExposureTime), Some("1/125"));
-    assert_eq!(
-        metadata.value(BuiltInField::DateTimeOriginal),
-        Some("2026/01/02 03:04:05")
-    );
-    assert_eq!(
-        metadata.value(BuiltInField::ExposureCompensation),
-        Some("+0.3")
-    );
-    assert_eq!(metadata.value(BuiltInField::WhiteBalance), Some("Auto"));
-    assert_eq!(metadata.value(BuiltInField::ExposureProgram), Some("A"));
-    assert_eq!(metadata.value(BuiltInField::MeteringMode), Some("评价测光"));
+#[test]
+fn generic_exif_fields_are_normalized_from_real_fixture() {
+    let metadata = read_scenario_metadata("landscape-default");
+    assert_matches_frozen_capture("landscape-default", &metadata);
+
     assert_eq!(metadata.orientation(), Some(ImageOrientation::Normal));
     assert_eq!(
         metadata.density().map(yiyin_domain::ImageDensity::get),
@@ -64,31 +47,18 @@ fn generic_exif_fields_are_normalized_from_real_fixture() {
 
 #[test]
 fn nikon_and_sony_fixture_values_remain_copy_exif_compatible() {
-    let nikon = ExifMetadataReader
-        .read(&fixtures().join("built-in-equivalent-focal.jpg"))
-        .expect("read Nikon EXIF")
-        .expect("Nikon metadata");
-    assert_eq!(nikon.value(BuiltInField::Make), Some("NIKON CORPORATION"));
-    assert_eq!(nikon.value(BuiltInField::Model), Some("NIKON Z 7_2"));
+    let nikon = read_scenario_metadata("built-in-equivalent-focal");
+    assert_matches_frozen_capture("built-in-equivalent-focal", &nikon);
 
-    let sony = ExifMetadataReader
-        .read(&fixtures().join("logo-light.jpg"))
-        .expect("read Sony EXIF")
-        .expect("Sony metadata");
-    assert_eq!(sony.value(BuiltInField::Make), Some("SONY"));
-    assert_eq!(sony.value(BuiltInField::Model), Some("ILCE-7RM5"));
+    let sony = read_scenario_metadata("logo-light");
+    assert_matches_frozen_capture("logo-light", &sony);
 }
 
 #[test]
 fn webp_exif_chunk_uses_the_same_normalization_pipeline() {
-    let metadata = ExifMetadataReader
-        .read(&fixtures().join("webp-default.webp"))
-        .expect("read WebP EXIF")
-        .expect("WebP metadata");
+    let metadata = read_scenario_metadata("webp-default");
+    assert_matches_frozen_capture("webp-default", &metadata);
 
-    assert_eq!(metadata.value(BuiltInField::Make), Some("ACME CORPORATION"));
-    assert_eq!(metadata.value(BuiltInField::Model), Some("Camera One"));
-    assert_eq!(metadata.value(BuiltInField::ExposureTime), Some("1/125"));
     assert_eq!(
         metadata.density().map(yiyin_domain::ImageDensity::get),
         Some(300)
@@ -97,13 +67,55 @@ fn webp_exif_chunk_uses_the_same_normalization_pipeline() {
 
 #[test]
 fn orientation_is_extracted_without_crossing_the_template_field_boundary() {
-    let metadata = ExifMetadataReader
-        .read(&fixtures().join("exif-orientation-6.jpg"))
-        .expect("read oriented EXIF")
-        .expect("oriented metadata");
+    let metadata = read_scenario_metadata("exif-orientation-6");
+    assert_matches_frozen_capture("exif-orientation-6", &metadata);
 
     assert_eq!(metadata.orientation(), Some(ImageOrientation::Rotate90));
-    assert_eq!(metadata.value(BuiltInField::Make), Some("ACME CORPORATION"));
+}
+
+/// Reads the manifest scenario's input image through the EXIF pipeline.
+fn read_scenario_metadata(id: &str) -> Metadata {
+    let manifest = legacy_manifest::load_manifest();
+    let scenario = manifest
+        .scenarios
+        .iter()
+        .find(|scenario| scenario.id == id)
+        .unwrap_or_else(|| panic!("manifest scenario {id}"));
+    ExifMetadataReader
+        .read(&legacy_manifest::legacy_root().join(&scenario.input))
+        .expect("read fixture EXIF")
+        .expect("fixture metadata")
+}
+
+/// Diffs the reader output against the frozen normalized-EXIF capture in both
+/// directions: every captured field must survive the pipeline unchanged, and
+/// the pipeline must not produce fields the capture did not record.
+fn assert_matches_frozen_capture(id: &str, metadata: &Metadata) {
+    let manifest = legacy_manifest::load_manifest();
+    let scenario = manifest
+        .scenarios
+        .iter()
+        .find(|scenario| scenario.id == id)
+        .unwrap_or_else(|| panic!("manifest scenario {id}"));
+    let expected: BTreeMap<String, String> = legacy_manifest::load_expected_metadata(scenario);
+
+    for (key, value) in &expected {
+        let field = BuiltInField::from_key(key)
+            .unwrap_or_else(|| panic!("{id}: frozen key {key} is not a built-in field"));
+        assert_eq!(
+            metadata.value(field),
+            Some(value.as_str()),
+            "{id} field {key}"
+        );
+    }
+    for field in BuiltInField::ALL {
+        assert_eq!(
+            metadata.value(field),
+            expected.get(field.key()).map(String::as_str),
+            "{id} field {}",
+            field.key()
+        );
+    }
 }
 
 #[test]

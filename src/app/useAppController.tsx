@@ -15,6 +15,7 @@ interface AppState {
   phase: Phase
   snapshot: BootstrapDto | null
   error: CommandErrorDto | null
+  dropError: CommandErrorDto | null
   selectedTaskId: string | null
   pendingEvents: Record<string, TaskStatusEventDto>
   refreshRequest: number
@@ -24,6 +25,7 @@ type AppAction =
   | { type: 'bootstrapped'; snapshot: BootstrapDto }
   | { type: 'bootstrap-failed'; error: CommandErrorDto }
   | { type: 'task-status'; event: TaskStatusEventDto }
+  | { type: 'drop-error'; error: CommandErrorDto }
   | { type: 'tasks-replaced'; tasks: TaskDescriptorDto[] }
   | { type: 'config-replaced'; config: PublicConfigDto }
   | { type: 'resource-upserted'; resource: ResourceDescriptorDto }
@@ -34,6 +36,7 @@ const initialState: AppState = {
   phase: 'loading',
   snapshot: null,
   error: null,
+  dropError: null,
   selectedTaskId: null,
   pendingEvents: {},
   refreshRequest: 0,
@@ -53,32 +56,45 @@ export function useAppController(client: PlatformClient) {
 
   useEffect(() => {
     let active = true
-    let unlisten: (() => void) | undefined
-    void client
-      .onTaskStatus((event) => {
+    const cleanups: Array<() => void> = []
+    const subscribe = (listen: () => Promise<() => void>) => {
+      void listen()
+        .then((cleanup) => {
+          if (active) {
+            cleanups.push(cleanup)
+          } else {
+            cleanup()
+          }
+        })
+        .catch((error: unknown) => {
+          if (active) {
+            dispatch({
+              type: 'bootstrap-failed',
+              error: parseCommandError(error),
+            })
+          }
+        })
+    }
+    subscribe(() =>
+      client.onTaskStatus((event) => {
         if (active) {
           dispatch({ type: 'task-status', event })
         }
-      })
-      .then((cleanup) => {
+      }),
+    )
+    subscribe(() =>
+      client.onDropError((error) => {
         if (active) {
-          unlisten = cleanup
-        } else {
-          cleanup()
+          dispatch({ type: 'drop-error', error })
         }
-      })
-      .catch((error: unknown) => {
-        if (active) {
-          dispatch({
-            type: 'bootstrap-failed',
-            error: parseCommandError(error),
-          })
-        }
-      })
+      }),
+    )
     void load()
     return () => {
       active = false
-      unlisten?.()
+      for (const cleanup of cleanups) {
+        cleanup()
+      }
     }
   }, [client, load])
 
@@ -142,6 +158,13 @@ export function useAppController(client: PlatformClient) {
     replaceTasks(await client.clearTasks())
   }, [client, invalidatePreviewRequests, replaceTasks])
 
+  const cancelTask = useCallback(
+    async (id: string) => {
+      replaceTasks(await client.cancelTask(id))
+    },
+    [client, replaceTasks],
+  )
+
   const chooseOutputDirectory = useCallback(async () => {
     replaceConfig(await client.chooseOutputDirectory())
   }, [client, replaceConfig])
@@ -201,6 +224,7 @@ export function useAppController(client: PlatformClient) {
     previewTask,
     invalidatePreviewRequests,
     clearTasks,
+    cancelTask,
     chooseOutputDirectory,
     openOutputDirectory,
     readTaskExif,
@@ -231,6 +255,8 @@ function reducer(state: AppState, action: AppAction): AppState {
     }
     case 'bootstrap-failed':
       return { ...state, phase: 'error', error: action.error }
+    case 'drop-error':
+      return { ...state, dropError: action.error }
     case 'task-status': {
       if (!state.snapshot) {
         return {
@@ -255,6 +281,7 @@ function reducer(state: AppState, action: AppAction): AppState {
       return {
         ...state,
         snapshot: { ...state.snapshot, tasks },
+        dropError: null,
         refreshRequest: isTerminal(action.event)
           ? state.refreshRequest + 1
           : state.refreshRequest,
@@ -265,6 +292,7 @@ function reducer(state: AppState, action: AppAction): AppState {
         ? {
             ...state,
             snapshot: { ...state.snapshot, tasks: action.tasks },
+            dropError: null,
             selectedTaskId: selectExisting(state.selectedTaskId, action.tasks),
           }
         : state

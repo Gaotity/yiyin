@@ -244,6 +244,7 @@ impl AppState {
                 Arc::clone(&config_repository),
                 Arc::clone(&resource_repository),
                 metadata,
+                output.clone(),
                 Arc::clone(&tasks),
             ),
             cancel_task: CancelTask::new(Arc::clone(&tasks)),

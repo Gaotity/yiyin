@@ -107,7 +107,7 @@ describe('App', () => {
     await waitFor(() => expect(fake.calls.bootstrap).toBe(2))
 
     view.unmount()
-    expect(fake.calls.unlisten).toBe(1)
+    expect(fake.calls.unlisten).toBe(2)
   })
 
   it('preserves help, feedback, donation, external link, and window interactions', async () => {
@@ -116,8 +116,11 @@ describe('App', () => {
       configurable: true,
       value: { writeText },
     })
+    const config = defaultBootstrap().config
+    config.version = '9.9.9'
     const fake = createFakePlatformClient({
       snapshot: defaultBootstrap({
+        config,
         resources: [
           {
             id: 'donate-wechat',
@@ -142,6 +145,11 @@ describe('App', () => {
     expect(screen.getByText('为什么输出的水印没有相机参数？')).toBeTruthy()
     expect(
       screen.getByText(
+        '鼠标点击图片列表下方的“打开输出目录”按钮即可打开输出目录',
+      ),
+    ).toBeTruthy()
+    expect(
+      screen.getByText(
         '请注意，如果您在Photoshop中对图片进行了大量编辑，可能会导致某些EXIF信息（如镜头信息、曝光时间等）不再准确反映编辑后的图片状态。此外，如果您使用的是Photoshop的“保存为Web所用格式”(Save for Web)功能或较早版本的Photoshop，保留EXIF信息的步骤可能会有所不同。',
       ),
     ).toBeTruthy()
@@ -161,7 +169,7 @@ describe('App', () => {
     fireEvent.click(
       screen.getByRole('button', { name: '反馈 - 建议(Github Issues)' }),
     )
-    fireEvent.click(screen.getByRole('button', { name: 'v1.6.0' }))
+    fireEvent.click(screen.getByRole('button', { name: 'v9.9.9' }))
     fireEvent.click(
       screen.getByRole('button', { name: 'B站 - 不长肉的小伙吒' }),
     )
@@ -181,5 +189,25 @@ describe('App', () => {
     expect(fake.calls.resetConfig).toBe(1)
     expect(fake.calls.minimizeWindow).toBe(1)
     expect(fake.calls.closeWindow).toBe(1)
+  })
+
+  it('surfaces a failure status when copying the feedback group is denied', async () => {
+    const writeText = vi.fn().mockRejectedValue(new Error('denied'))
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    })
+    const fake = createFakePlatformClient()
+    render(<App client={fake.client} />)
+    await screen.findByText('添加图片')
+
+    fireEvent.click(screen.getByRole('button', { name: '反馈与赞赏' }))
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'QQ交流群:718615618' }),
+    )
+
+    expect(writeText).toHaveBeenCalledWith('718615618')
+    expect(await screen.findByText('复制失败，请手动记录群号')).toBeTruthy()
+    expect(screen.queryByText('群号已复制到粘贴板')).toBeNull()
   })
 })

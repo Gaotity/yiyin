@@ -1,9 +1,11 @@
+#[path = "support/legacy_manifest.rs"]
+mod legacy_manifest;
 #[path = "support/perceptual.rs"]
 mod perceptual;
 
 use std::{fs, path::PathBuf, sync::Arc};
 
-use serde::Deserialize;
+use legacy_manifest::Scenario;
 use yiyin_application::{CancellationProbe, ImageRenderer, MetadataReader, ResourceRepository};
 use yiyin_domain::{
     BackgroundBlur, BackgroundRatio, CaseConversion, Config, FontSpec, ImageDensity,
@@ -11,38 +13,6 @@ use yiyin_domain::{
     TextMeasurement, VerticalAlign,
 };
 use yiyin_infrastructure::{ExifMetadataReader, ResourceRegistry, RustImageRenderer};
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct Manifest {
-    scenarios: Vec<Scenario>,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct Scenario {
-    id: String,
-    input: String,
-    options: serde_json::Value,
-    template_keys: Vec<String>,
-    expected_output: String,
-    output: ExpectedOutput,
-    perceptual_threshold: Threshold,
-}
-
-#[derive(Deserialize)]
-struct ExpectedOutput {
-    width: u32,
-    height: u32,
-    density: Option<u32>,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct Threshold {
-    min_ssim: f64,
-    max_changed_pixel_ratio: f64,
-}
 
 struct NeverCancelled;
 
@@ -52,21 +22,14 @@ impl CancellationProbe for NeverCancelled {
     }
 }
 
-fn fixture_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures")
-}
-
 #[test]
 #[allow(
     clippy::too_many_lines,
     reason = "the golden test keeps one readable end-to-end compatibility flow"
 )]
 fn rust_renderer_matches_every_captured_legacy_scenario() {
-    let root = fixture_root();
-    let manifest: Manifest = serde_json::from_slice(
-        &fs::read(root.join("legacy/manifest.json")).expect("read manifest"),
-    )
-    .expect("parse manifest");
+    let root = legacy_manifest::fixture_root();
+    let manifest = legacy_manifest::load_manifest();
     let temp = tempfile::tempdir().expect("tempdir");
     let registry =
         Arc::new(ResourceRegistry::new(temp.path().join("resources")).expect("resource registry"));
@@ -118,7 +81,7 @@ fn rust_renderer_matches_every_captured_legacy_scenario() {
             config,
             metadata,
         )
-        .with_text_rows(text_measurements(&scenario.id));
+        .with_text_rows(text_measurements(scenario));
         let request = if let Some(density) = resource.density() {
             request.with_density(density)
         } else {
@@ -276,24 +239,34 @@ fn scenario_config(scenario: &Scenario) -> Config {
     config
 }
 
-fn text_measurements(id: &str) -> Vec<TextMeasurement> {
-    let values: &[(u32, f64)] = match id {
-        "portrait-default" => &[(398, 52.0), (474, 48.0)],
+/// Rebuilds the measured text extents the legacy renderer was fed. Row widths
+/// come from the frozen manifest's `exactGeometry.textRows`; the measured row
+/// heights are renderer inputs the capture did not record, so they stay here.
+fn text_measurements(scenario: &Scenario) -> Vec<TextMeasurement> {
+    let measured_heights: &[f64] = match scenario.id.as_str() {
+        "portrait-default" => &[52.0, 48.0],
         "landscape-default"
         | "webp-default"
         | "blurred-shadow-radius"
         | "solid-white-no-shadow"
-        | "bundled-custom-font" => &[(390, 51.0), (465, 47.0)],
-        "exif-orientation-6" => &[(563, 77.0), (677, 71.0)],
-        "explicit-ratio-3x2" => &[(364, 47.0), (432, 43.0)],
-        "portrait-to-landscape" => &[(914, 130.0), (1108, 121.0)],
-        "built-in-equivalent-focal" | "built-in-original-focal" => &[(320, 62.0), (465, 47.0)],
-        "logo-light" | "logo-dark" => &[(414, 62.0)],
-        "custom-text-forced" => &[(312, 46.0)],
-        _ => panic!("unknown fixture {id}"),
+        | "bundled-custom-font" => &[51.0, 47.0],
+        "exif-orientation-6" => &[77.0, 71.0],
+        "explicit-ratio-3x2" => &[47.0, 43.0],
+        "portrait-to-landscape" => &[130.0, 121.0],
+        "built-in-equivalent-focal" | "built-in-original-focal" => &[62.0, 47.0],
+        "logo-light" | "logo-dark" => &[62.0],
+        "custom-text-forced" => &[46.0],
+        _ => panic!("unknown fixture {}", scenario.id),
     };
-    values
-        .iter()
-        .map(|&(width, height)| TextMeasurement::new(width, height).expect("text measurement"))
+    let rows = &scenario.exact_geometry.text_rows;
+    assert_eq!(
+        rows.len(),
+        measured_heights.len(),
+        "{} text row count",
+        scenario.id
+    );
+    rows.iter()
+        .zip(measured_heights)
+        .map(|(row, &height)| TextMeasurement::new(row.width, height).expect("text measurement"))
         .collect()
 }

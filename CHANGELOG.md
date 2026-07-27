@@ -1,6 +1,16 @@
 # Changelog
 
 
+## Unreleased
+
+### 🚀 Enhancements
+
+- Rewrote the desktop runtime from Electron/Svelte to Tauri 2 + Rust + React (see `docs/specs/tauri-rust-rewrite.md`)
+
+### 🩹 Fixes
+
+- Follow-up hardening: window-drag capability, drop-error feedback, output-name reservation release, preview resource cleanup, bundle-verification scanning of large binaries, frozen-fixture benchmark wiring
+
 ## v1.6.0
 
 [compare changes](https://github.com/ggchivalrous/yiyin/compare/v1.4.4...v1.6.0)

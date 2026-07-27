@@ -120,6 +120,7 @@ impl ConfigRepository for FakeConfig {
 struct FakeOutput {
     names: Arc<Mutex<BTreeSet<String>>>,
     reservations: Arc<Mutex<Vec<String>>>,
+    releases: Arc<Mutex<Vec<String>>>,
 }
 
 impl FakeOutput {
@@ -127,11 +128,16 @@ impl FakeOutput {
         Self {
             names: Arc::new(Mutex::new(names.into_iter().map(str::to_owned).collect())),
             reservations: Arc::default(),
+            releases: Arc::default(),
         }
     }
 
     fn reservations(&self) -> Vec<String> {
         self.reservations.lock().expect("reservations lock").clone()
+    }
+
+    fn releases(&self) -> Vec<String> {
+        self.releases.lock().expect("releases lock").clone()
     }
 }
 
@@ -151,6 +157,15 @@ impl OutputDirectoryGateway for FakeOutput {
             .push(file_name.to_owned());
         Ok(())
     }
+
+    fn release(&self, file_name: &str) -> Result<(), ApplicationError> {
+        self.names.lock().expect("names lock").remove(file_name);
+        self.releases
+            .lock()
+            .expect("releases lock")
+            .push(file_name.to_owned());
+        Ok(())
+    }
 }
 
 #[derive(Default)]
@@ -160,6 +175,8 @@ struct QueueState {
     preview: Option<RenderRequest>,
     superseded_previews: Vec<TaskId>,
     cancelled: BTreeSet<String>,
+    failed: BTreeSet<String>,
+    cleared_output: BTreeSet<String>,
     results: Vec<(TaskId, ResourceSnapshot)>,
 }
 
@@ -187,6 +204,25 @@ impl FakeQueue {
             .expect("queue lock")
             .superseded_previews
             .clone()
+    }
+
+    fn export_names(&self, id: &TaskId) -> Vec<String> {
+        self.0
+            .lock()
+            .expect("queue lock")
+            .exports
+            .iter()
+            .filter(|request| request.task_id() == id)
+            .map(|request| request.output_name().to_owned())
+            .collect()
+    }
+
+    fn fail(&self, id: &TaskId) {
+        self.0
+            .lock()
+            .expect("queue lock")
+            .failed
+            .insert(id.as_str().to_owned());
     }
 
     fn complete(&self, id: &TaskId) {
@@ -221,12 +257,19 @@ impl TaskQueue for FakeQueue {
     }
 
     fn enqueue(&self, request: RenderRequest) -> Result<(), ApplicationError> {
-        self.0.lock().expect("queue lock").exports.push(request);
+        let mut state = self.0.lock().expect("queue lock");
+        state.cleared_output.remove(request.task_id().as_str());
+        state.exports.push(request);
         Ok(())
     }
 
     fn preview(&self, request: RenderRequest) -> Result<(), ApplicationError> {
         let mut state = self.0.lock().expect("queue lock");
+        // Mirrors the real queue: starting a preview clears the task's
+        // tracked output name.
+        state
+            .cleared_output
+            .insert(request.task_id().as_str().to_owned());
         if let Some(previous) = state.preview.replace(request) {
             state.superseded_previews.push(previous.task_id().clone());
         }
@@ -238,6 +281,15 @@ impl TaskQueue for FakeQueue {
             .lock()
             .expect("queue lock")
             .cancelled
+            .insert(id.as_str().to_owned());
+        Ok(())
+    }
+
+    fn clear_output_name(&self, id: &TaskId) -> Result<(), ApplicationError> {
+        self.0
+            .lock()
+            .expect("queue lock")
+            .cleared_output
             .insert(id.as_str().to_owned());
         Ok(())
     }
@@ -257,39 +309,59 @@ impl TaskQueue for FakeQueue {
             .registered
             .iter()
             .map(|task| {
-                if let Some((_, resource)) = state
+                let snapshot = if let Some((_, resource)) = state
                     .results
                     .iter()
                     .find(|(task_id, _)| task_id == task.id())
                 {
-                    return TaskSnapshot::new(
+                    TaskSnapshot::new(
                         task.id().clone(),
                         task.display_name(),
                         TaskState::Completed,
                         100,
                         false,
                     )
-                    .with_resource(resource.clone());
-                }
-                if state.cancelled.contains(task.id().as_str()) {
-                    return TaskSnapshot::new(
+                    .with_resource(resource.clone())
+                } else if state.failed.contains(task.id().as_str()) {
+                    TaskSnapshot::new(
+                        task.id().clone(),
+                        task.display_name(),
+                        TaskState::Failed,
+                        0,
+                        false,
+                    )
+                } else if state.cancelled.contains(task.id().as_str()) {
+                    TaskSnapshot::new(
                         task.id().clone(),
                         task.display_name(),
                         TaskState::Cancelled,
                         0,
                         false,
-                    );
-                }
-                let task_state = if state
+                    )
+                } else {
+                    let task_state = if state
+                        .exports
+                        .iter()
+                        .any(|request| request.task_id() == task.id())
+                    {
+                        TaskState::Queued
+                    } else {
+                        TaskState::Registered
+                    };
+                    TaskSnapshot::new(task.id().clone(), task.display_name(), task_state, 0, false)
+                };
+                if state.cleared_output.contains(task.id().as_str()) {
+                    snapshot
+                } else if let Some(request) = state
                     .exports
                     .iter()
-                    .any(|request| request.task_id() == task.id())
+                    .rev()
+                    .find(|request| request.task_id() == task.id())
                 {
-                    TaskState::Queued
+                    snapshot.with_output_name(request.output_name().to_owned())
                 } else {
-                    TaskState::Registered
-                };
-                TaskSnapshot::new(task.id().clone(), task.display_name(), task_state, 0, false)
+                    snapshot
+                }
             })
             .collect()
     }
@@ -437,6 +509,7 @@ fn newer_preview_supersedes_the_previous_preview_without_reserving_output() {
         harness.config.clone(),
         harness.resources.clone(),
         harness.metadata.clone(),
+        harness.output.clone(),
         harness.queue.clone(),
     );
 
@@ -449,6 +522,29 @@ fn newer_preview_supersedes_the_previous_preview_without_reserving_output() {
     assert_eq!(request.options().quality.get(), 70);
     assert_eq!(harness.queue.superseded_previews(), [first]);
     assert!(harness.output.reservations().is_empty());
+}
+
+#[test]
+fn previewing_a_failed_export_releases_its_reservation_for_the_retry() {
+    let harness = Harness::with_quality(100);
+    let id = harness.register("task-1", "photo.png");
+    let preview = PreviewTask::new(
+        harness.config.clone(),
+        harness.resources.clone(),
+        harness.metadata.clone(),
+        harness.output.clone(),
+        harness.queue.clone(),
+    );
+
+    harness.start().execute(std::slice::from_ref(&id)).unwrap();
+    harness.queue.fail(&id);
+    preview.execute(&id).unwrap();
+    harness.start().execute(std::slice::from_ref(&id)).unwrap();
+
+    // The failed export's reservation is released before the preview starts,
+    // so the retry reuses the original name instead of photo-2.jpg.
+    assert_eq!(harness.output.releases(), ["photo.jpg"]);
+    assert_eq!(harness.queue.export_names(&id), ["photo.jpg", "photo.jpg"]);
 }
 
 #[test]
@@ -490,4 +586,53 @@ fn completed_snapshots_expose_an_opaque_resource_without_a_path() {
 
     assert_eq!(resource.kind(), ResourceKind::Output);
     assert!(!format!("{snapshot:?}").contains("/private/output"));
+}
+
+#[test]
+fn cancelling_an_export_releases_its_output_name_for_reuse() {
+    let harness = Harness::with_quality(100);
+    let id = harness.register("task-1", "photo.png");
+
+    harness.start().execute(std::slice::from_ref(&id)).unwrap();
+    CancelTask::new(harness.queue.clone()).execute(&id).unwrap();
+    harness.start().execute(std::slice::from_ref(&id)).unwrap();
+
+    assert_eq!(harness.queue.export_names(&id), ["photo.jpg", "photo.jpg"]);
+}
+
+#[test]
+fn a_failed_export_releases_its_output_name_for_reuse() {
+    let harness = Harness::with_quality(100);
+    let id = harness.register("task-1", "photo.png");
+
+    harness.start().execute(std::slice::from_ref(&id)).unwrap();
+    harness.queue.fail(&id);
+    harness.start().execute(std::slice::from_ref(&id)).unwrap();
+
+    assert_eq!(harness.queue.export_names(&id), ["photo.jpg", "photo.jpg"]);
+}
+
+#[test]
+fn a_released_terminal_reservation_is_not_released_again() {
+    let harness = Harness::with_quality(100);
+    let failed = harness.register("task-1", "photo.png");
+    let replacement = harness.register("task-2", "photo.png");
+
+    harness
+        .start()
+        .execute(std::slice::from_ref(&failed))
+        .unwrap();
+    harness.queue.fail(&failed);
+    harness
+        .start()
+        .execute(std::slice::from_ref(&replacement))
+        .unwrap();
+    harness
+        .start()
+        .execute(std::slice::from_ref(&replacement))
+        .unwrap();
+
+    // The failed task's reservation is released exactly once; releasing it
+    // again would free the name the replacement task has since reserved.
+    assert_eq!(harness.output.releases(), ["photo.jpg"]);
 }

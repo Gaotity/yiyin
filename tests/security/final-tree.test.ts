@@ -15,7 +15,6 @@ function trackedFiles(): string[] {
 }
 
 const allowedProvenance = (path: string) =>
-  path.startsWith('docs/superpowers/') ||
   path.startsWith('tests/fixtures/legacy/') ||
   path === 'tests/security/final-tree.test.ts' ||
   path === 'tests/security/policy.test.ts' ||

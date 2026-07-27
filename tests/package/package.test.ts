@@ -129,13 +129,125 @@ describe('bundle verification', () => {
       ]),
     )
   })
+
+  const writeLargeBundle = (name: string) => {
+    const fixture = join(
+      tmpdir(),
+      `yiyin-package-large-${process.pid}-${Date.now()}`,
+      '壹印.app',
+    )
+    mkdirSync(join(fixture, 'Contents', 'MacOS'), { recursive: true })
+    mkdirSync(join(fixture, 'Contents', 'Resources'), { recursive: true })
+    writeFileSync(
+      join(fixture, 'Contents', 'Info.plist'),
+      plist('壹印', 'io.github.gaotity.yiyin', '1.6.0'),
+    )
+    writeFileSync(join(fixture, 'Contents', 'MacOS', '壹印'), 'native-binary')
+    writeFileSync(join(fixture, 'Contents', 'Resources', 'icon.icns'), 'icon')
+    const large = Buffer.alloc(6 * 1024 * 1024, 'a')
+    large.write('electron', 5 * 1024 * 1024 + 100, 'utf8')
+    large.write(
+      'https://evil.example/payload.js',
+      6 * 1024 * 1024 - 100,
+      'utf8',
+    )
+    writeFileSync(join(fixture, 'Contents', 'Resources', name), large)
+    return fixture
+  }
+
+  it('scans payloads and remote URLs in text files larger than 5MB', async () => {
+    const path = resolve(root, 'scripts/verify-bundle.mjs')
+    const module = await importIfPresent<{
+      verifyBundle(options: {
+        platform: 'macos' | 'windows'
+        artifact: string
+        root: string
+      }): string[]
+    }>(path)
+    expect(module).not.toBeNull()
+    if (!module) {
+      return
+    }
+    const fixture = writeLargeBundle('main.js')
+
+    expect(
+      module.verifyBundle({ platform: 'macos', artifact: fixture, root }),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('forbidden payload electron'),
+        expect.stringContaining('remote URL'),
+      ]),
+    )
+  })
+
+  it('terminates URL matches at NUL bytes inside binary-like content', async () => {
+    const path = resolve(root, 'scripts/verify-bundle.mjs')
+    const module = await importIfPresent<{
+      verifyBundle(options: {
+        platform: 'macos' | 'windows'
+        artifact: string
+        root: string
+      }): string[]
+    }>(path)
+    expect(module).not.toBeNull()
+    if (!module) {
+      return
+    }
+    const fixture = join(
+      tmpdir(),
+      `yiyin-package-nul-${process.pid}-${Date.now()}`,
+      '壹印.app',
+    )
+    mkdirSync(join(fixture, 'Contents', 'MacOS'), { recursive: true })
+    mkdirSync(join(fixture, 'Contents', 'Resources'), { recursive: true })
+    writeFileSync(
+      join(fixture, 'Contents', 'Info.plist'),
+      plist('壹印', 'io.github.gaotity.yiyin', '1.6.0'),
+    )
+    writeFileSync(join(fixture, 'Contents', 'MacOS', '壹印'), 'native-binary')
+    writeFileSync(join(fixture, 'Contents', 'Resources', 'icon.icns'), 'icon')
+    // The allowed IPC URL is still allowed when a NUL-terminated string is
+    // followed by binary bytes; the match must stop at the NUL.
+    const embedded = Buffer.concat([
+      Buffer.from('http://ipc.localhost\0', 'utf8'),
+      Buffer.alloc(16, 0xff),
+    ])
+    writeFileSync(join(fixture, 'Contents', 'Resources', 'main.js'), embedded)
+
+    expect(
+      module.verifyBundle({ platform: 'macos', artifact: fixture, root }),
+    ).toEqual([])
+  })
+
+  it('skips content scanning for large binary files', async () => {
+    const path = resolve(root, 'scripts/verify-bundle.mjs')
+    const module = await importIfPresent<{
+      verifyBundle(options: {
+        platform: 'macos' | 'windows'
+        artifact: string
+        root: string
+      }): string[]
+    }>(path)
+    expect(module).not.toBeNull()
+    if (!module) {
+      return
+    }
+    const fixture = writeLargeBundle('main.bin')
+
+    // Compiled binaries legitimately embed web-platform data tables whose
+    // bytes resemble payload names and URLs, so content checks only apply
+    // to text-like files; name-based checks still cover every file.
+    expect(
+      module.verifyBundle({ platform: 'macos', artifact: fixture, root }),
+    ).toEqual([])
+  })
 })
 
 describe('W3C smoke command', () => {
   it('accepts the pnpm script argument separator', async () => {
     const path = resolve(root, 'scripts/w3c-smoke.mjs')
     const module = await importIfPresent<{
-      parseArgs(argv: string[]): { application: string; baseUrl: string }
+      parseArgs(argv: string[]): { debuggerAddress: string; baseUrl: string }
     }>(path)
     expect(module).not.toBeNull()
     if (!module) {
@@ -143,9 +255,9 @@ describe('W3C smoke command', () => {
     }
 
     expect(
-      module.parseArgs(['--', '--application', 'target/release/yiyin.exe']),
+      module.parseArgs(['--', '--debugger-address', '127.0.0.1:9222']),
     ).toEqual({
-      application: 'target/release/yiyin.exe',
+      debuggerAddress: '127.0.0.1:9222',
       baseUrl: 'http://127.0.0.1:4444',
     })
   })
@@ -169,7 +281,7 @@ describe('W3C smoke command', () => {
           body?: unknown,
           timeout?: number,
         ) => Promise<unknown>,
-        application: string,
+        debuggerAddress: string,
       ): Promise<unknown>
     }>(path)
     expect(module).not.toBeNull()
@@ -201,10 +313,7 @@ describe('W3C smoke command', () => {
     }
 
     await module.waitForDriver(command, 1_000)
-    const session = await module.createSession(
-      command,
-      'target/release/yiyin.exe',
-    )
+    const session = await module.createSession(command, '127.0.0.1:9222')
 
     expect(session).toEqual({ value: { sessionId: 'session-1' } })
     expect(calls.filter(({ path }) => path === '/status')).toHaveLength(2)
@@ -213,6 +322,13 @@ describe('W3C smoke command', () => {
       method: 'POST',
       path: '/session',
       timeout: 120_000,
+      body: {
+        capabilities: {
+          alwaysMatch: {
+            'ms:edgeOptions': { debuggerAddress: '127.0.0.1:9222' },
+          },
+        },
+      },
     })
   })
 })

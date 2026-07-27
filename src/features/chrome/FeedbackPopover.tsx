@@ -14,6 +14,7 @@ interface FeedbackPopoverProps {
 
 export function FeedbackPopover({ resources, onOpen }: FeedbackPopoverProps) {
   const [copied, setCopied] = useState(false)
+  const [copyFailed, setCopyFailed] = useState(false)
   const wechat = resources.find(
     (resource) => resource.displayName === 'zs-wx.jpg',
   )
@@ -22,8 +23,14 @@ export function FeedbackPopover({ resources, onOpen }: FeedbackPopoverProps) {
   )
 
   const copyGroup = async () => {
-    await navigator.clipboard.writeText(QQ_GROUP)
-    setCopied(true)
+    try {
+      await navigator.clipboard.writeText(QQ_GROUP)
+      setCopyFailed(false)
+      setCopied(true)
+    } catch {
+      setCopied(false)
+      setCopyFailed(true)
+    }
   }
 
   return (
@@ -36,6 +43,7 @@ export function FeedbackPopover({ resources, onOpen }: FeedbackPopoverProps) {
         QQ交流群:{QQ_GROUP}
       </button>
       {copied && <p role="status">群号已复制到粘贴板</p>}
+      {copyFailed && <p role="alert">复制失败，请手动记录群号</p>}
       <button
         type="button"
         className="popover-action"

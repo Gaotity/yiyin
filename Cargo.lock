@@ -5287,6 +5287,10 @@ dependencies = [
 [[package]]
 name = "yiyin-domain"
 version = "1.6.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "yiyin-infrastructure"

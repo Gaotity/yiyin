@@ -15,7 +15,6 @@ env:
   NODE_VERSION: 24.x
   PNPM_VERSION: 11.13.0
   RUST_TOOLCHAIN: 1.97.0
-  CARGO_DENY_VERSION: 0.20.2
 
 jobs:
   native-changes:
@@ -177,7 +176,7 @@ jobs:
           fi
           echo "== CDP targets =="
           curl -s http://127.0.0.1:9222/json
-          pnpm smoke:w3c -- --application target/release/yiyin.exe --debugger-address 127.0.0.1:9222
+          pnpm smoke:w3c -- --debugger-address 127.0.0.1:9222
       - name: Stop WebDriver smoke processes
         if: always()
         shell: pwsh

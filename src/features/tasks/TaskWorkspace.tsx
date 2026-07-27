@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { parseCommandError, type PlatformClient } from '../../platform/client'
-import type { PublicConfigDto, TaskDescriptorDto } from '../../platform/types'
+import type {
+  CommandErrorDto,
+  PublicConfigDto,
+  TaskDescriptorDto,
+} from '../../platform/types'
 import { OutputControls } from './OutputControls'
 import { PreviewPane } from './PreviewPane'
 import { TaskList } from './TaskList'
@@ -9,11 +13,13 @@ interface TaskWorkspaceProps {
   config: PublicConfigDto
   tasks: TaskDescriptorDto[]
   selectedId: string | null
+  dropError: CommandErrorDto | null
   readExif: PlatformClient['readTaskExif']
   onSelect(id: string): void
   onChooseImages(): Promise<void>
   onStartTasks(): Promise<void>
   onPreviewTask(id: string): Promise<void>
+  onCancelTask(id: string): Promise<void>
   onInvalidatePreview(): void
   onChooseOutput(): Promise<void>
   onOpenOutput(): Promise<void>
@@ -26,11 +32,13 @@ export function TaskWorkspace({
   config,
   tasks,
   selectedId,
+  dropError,
   readExif,
   onSelect,
   onChooseImages,
   onStartTasks,
   onPreviewTask,
+  onCancelTask,
   onInvalidatePreview,
   onChooseOutput,
   onOpenOutput,
@@ -106,6 +114,7 @@ export function TaskWorkspace({
         selectedId={selectedId}
         readExif={readExif}
         onSelect={onSelect}
+        onCancel={(id) => void run(() => onCancelTask(id))}
         onError={showError}
       />
       <OutputControls
@@ -114,9 +123,9 @@ export function TaskWorkspace({
         onOpenOutput={() => void run(onOpenOutput)}
         onClear={() => void run(onClear)}
       />
-      {error && (
+      {(error ?? dropError?.message) && (
         <p className="task-error" role="alert">
-          {error}
+          {error ?? dropError?.message}
         </p>
       )}
       <div className="primary-actions">

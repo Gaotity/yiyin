@@ -7,6 +7,7 @@ interface TaskListProps {
   selectedId: string | null
   readExif: PlatformClient['readTaskExif']
   onSelect(id: string): void
+  onCancel(id: string): void
   onError(error: unknown): void
 }
 
@@ -15,6 +16,7 @@ export function TaskList({
   selectedId,
   readExif,
   onSelect,
+  onCancel,
   onError,
 }: TaskListProps) {
   return (
@@ -27,6 +29,7 @@ export function TaskList({
           selected={task.id === selectedId}
           readExif={readExif}
           onSelect={onSelect}
+          onCancel={onCancel}
           onError={onError}
         />
       ))}

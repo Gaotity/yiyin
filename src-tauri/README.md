@@ -14,7 +14,9 @@ yiyin-domain <- yiyin-application <- yiyin-infrastructure <- yiyin-desktop
 ```
 
 - `yiyin-domain` owns pure entities, value objects, invariants, and render
-  plans. It has no serialization, filesystem, image, async, or Tauri dependency.
+  plans. Its production code has no serialization, filesystem, image, async,
+  or Tauri dependency (dev-only test dependencies parse the frozen legacy
+  fixtures).
 - `yiyin-application` owns use cases and inbound/outbound ports and depends
   only on the domain.
 - `yiyin-infrastructure` implements persistence, resource, EXIF, rendering,

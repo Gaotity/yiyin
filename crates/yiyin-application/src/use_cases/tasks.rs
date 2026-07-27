@@ -1,6 +1,6 @@
 use std::{collections::BTreeSet, sync::Arc};
 
-use yiyin_domain::{Config, OutputNameResolver, Quality, RenderRequest, TaskId};
+use yiyin_domain::{Config, OutputNameResolver, Quality, RenderRequest, TaskId, TaskState};
 
 use crate::{
     ApplicationError, ConfigRepository, MetadataReader, OutputDirectoryGateway, RegisteredTask,
@@ -84,6 +84,7 @@ impl StartTasks {
         registered: Vec<RegisteredTask>,
         config: &Config,
     ) -> Result<Vec<TaskSnapshot>, ApplicationError> {
+        self.release_terminal_reservations()?;
         let mut existing_names = self.output.existing_names()?;
         let mut requests = Vec::with_capacity(registered.len());
         for task in registered {
@@ -104,12 +105,39 @@ impl StartTasks {
         }
         Ok(self.tasks.snapshot())
     }
+
+    /// Releases reservations held by tasks that failed or were cancelled so a
+    /// later export can reuse the original output name.
+    fn release_terminal_reservations(&self) -> Result<(), ApplicationError> {
+        release_terminal_reservations(self.tasks.as_ref(), self.output.as_ref())
+    }
+}
+
+/// Releases reservations held by tasks that failed or were cancelled so a
+/// later export can reuse the original output name. Each reservation is
+/// released exactly once: the snapshot's output name is cleared after the
+/// release so a later start cannot free a name that another task has since
+/// reserved.
+fn release_terminal_reservations(
+    tasks: &dyn TaskQueue,
+    output: &dyn OutputDirectoryGateway,
+) -> Result<(), ApplicationError> {
+    for task in tasks.snapshot() {
+        if matches!(task.state(), TaskState::Failed | TaskState::Cancelled)
+            && let Some(output_name) = task.output_name()
+        {
+            output.release(output_name)?;
+            tasks.clear_output_name(task.id())?;
+        }
+    }
+    Ok(())
 }
 
 pub struct PreviewTask {
     config: Arc<dyn ConfigRepository>,
     resources: Arc<dyn ResourceRepository>,
     metadata: Arc<dyn MetadataReader>,
+    output: Arc<dyn OutputDirectoryGateway>,
     tasks: Arc<dyn TaskQueue>,
 }
 
@@ -119,12 +147,14 @@ impl PreviewTask {
         config: Arc<dyn ConfigRepository>,
         resources: Arc<dyn ResourceRepository>,
         metadata: Arc<dyn MetadataReader>,
+        output: Arc<dyn OutputDirectoryGateway>,
         tasks: Arc<dyn TaskQueue>,
     ) -> Self {
         Self {
             config,
             resources,
             metadata,
+            output,
             tasks,
         }
     }
@@ -140,6 +170,10 @@ impl PreviewTask {
             .tasks
             .registered(id)
             .ok_or_else(ApplicationError::task_not_found)?;
+        // A preview clears the task's tracked output name, so a failed or
+        // cancelled export's reservation must be released first — otherwise
+        // the gateway keeps the name and the retry becomes a phantom gap.
+        release_terminal_reservations(self.tasks.as_ref(), self.output.as_ref())?;
         let mut config = self.config.load()?;
         config.options.quality = Quality::try_from(70_u8).map_err(|_| {
             ApplicationError::internal("the domain rejected the fixed preview quality")

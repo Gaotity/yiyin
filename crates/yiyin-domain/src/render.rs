@@ -224,19 +224,11 @@ pub struct TextRect {
     pub height: f64,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct MaskSurface {
-    pub width: u32,
-    pub height: u32,
-    pub scale: f64,
-}
-
 #[derive(Clone, Debug, PartialEq)]
 pub struct RenderPlan {
     pub canvas: ImageDimensions,
     pub main_rect: Rect,
     pub text_rows: Vec<TextRect>,
-    pub mask_surface: MaskSurface,
     pub shadow_blur: f64,
     pub corner_radius: f64,
 }
@@ -273,17 +265,15 @@ impl RenderPlan {
         )?;
         let main_rect = recenter_content(canvas, input, content.height, content.top)?;
         let text_rows = place_text_rows(canvas, &request.text_rows, bottom_offset)?;
-        let mask_surface = shadow_surface(canvas)?;
-        let scaled_main_height = ceil_u32(f64::from(input.height) * mask_surface.scale)?;
+        let surface_scale = shadow_surface_scale(canvas);
+        let scaled_main_height = ceil_u32(f64::from(input.height) * surface_scale)?;
         let shadow_blur = if request.options().shadow_visible {
-            f64::from(scaled_main_height) * (request.options().shadow.get() / 100.0)
-                / mask_surface.scale
+            f64::from(scaled_main_height) * (request.options().shadow.get() / 100.0) / surface_scale
         } else {
             0.0
         };
         let corner_radius = if request.options().radius_visible {
-            f64::from(scaled_main_height) * (request.options().radius.get() / 100.0)
-                / mask_surface.scale
+            f64::from(scaled_main_height) * (request.options().radius.get() / 100.0) / surface_scale
         } else {
             0.0
         };
@@ -292,7 +282,6 @@ impl RenderPlan {
             canvas,
             main_rect,
             text_rows,
-            mask_surface,
             shadow_blur,
             corner_radius,
         })
@@ -419,29 +408,16 @@ fn place_text_rows(
     Ok(reversed)
 }
 
-fn shadow_surface(canvas: ImageDimensions) -> Result<MaskSurface, DomainError> {
+fn shadow_surface_scale(canvas: ImageDimensions) -> f64 {
     if canvas.width <= SHADOW_SURFACE_WIDTH_CAP {
-        return Ok(MaskSurface {
-            width: canvas.width,
-            height: canvas.height,
-            scale: 1.0,
-        });
+        1.0
+    } else {
+        f64::from(SHADOW_SURFACE_WIDTH_CAP) / f64::from(canvas.width)
     }
-
-    let scale = f64::from(SHADOW_SURFACE_WIDTH_CAP) / f64::from(canvas.width);
-    Ok(MaskSurface {
-        width: SHADOW_SURFACE_WIDTH_CAP,
-        height: floor_u32(f64::from(canvas.height) * scale)?,
-        scale,
-    })
 }
 
 fn ceil_u32(value: f64) -> Result<u32, DomainError> {
     checked_u32(value.ceil())
-}
-
-fn floor_u32(value: f64) -> Result<u32, DomainError> {
-    checked_u32(value.floor())
 }
 
 fn round_u32(value: f64) -> Result<u32, DomainError> {

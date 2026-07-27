@@ -90,6 +90,69 @@ describe('task workflows', () => {
     expect(startTasks).not.toHaveBeenCalled()
   })
 
+  it('surfaces native drag-and-drop registration failures in the error area', async () => {
+    const fake = createFakePlatformClient()
+    render(<App client={fake.client} />)
+    await screen.findByRole('button', { name: '添加图片' })
+
+    act(() => {
+      fake.emitDropError({
+        code: 'FILE_INVALID',
+        message: 'The selected file is invalid.',
+      })
+    })
+
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toContain('The selected file is invalid.')
+    expect(document.body.textContent).not.toContain('/Users/')
+  })
+
+  it('clears a stale drop error once task activity resumes', async () => {
+    const existing = task('task-one', 'one.jpg')
+    const fake = createFakePlatformClient({
+      snapshot: defaultBootstrap({ tasks: [existing] }),
+    })
+    render(<App client={fake.client} />)
+    await screen.findByRole('button', { name: '添加图片' })
+
+    act(() => {
+      fake.emitDropError({
+        code: 'FILE_INVALID',
+        message: 'The selected file is invalid.',
+      })
+    })
+    expect(await screen.findByRole('alert')).toBeTruthy()
+
+    act(() => {
+      fake.emitTaskStatus({
+        taskId: 'task-one',
+        state: 'queued',
+        progress: 0,
+        preview: false,
+        cancellationReason: null,
+      })
+    })
+
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull())
+  })
+
+  it('cancels a running task from the task list', async () => {
+    const running = task('task-one', 'one.jpg', {
+      state: 'running',
+      progress: 40,
+    })
+    const fake = createFakePlatformClient({
+      snapshot: defaultBootstrap({ tasks: [running] }),
+    })
+    const cancelTask = vi.spyOn(fake.client, 'cancelTask')
+    render(<App client={fake.client} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: '取消 one.jpg' }))
+
+    await waitFor(() => expect(cancelTask).toHaveBeenCalledWith('task-one'))
+    expect(await screen.findByText('已取消')).toBeTruthy()
+  })
+
   it('shows progress, terminal states, loads EXIF, and copies normalized fields only', async () => {
     const first = task('task-one', 'one.jpg')
     const second = task('task-two', 'two.jpg')

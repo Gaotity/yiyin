@@ -1,190 +1,196 @@
 #![allow(
     clippy::float_cmp,
-    clippy::unreadable_literal,
-    reason = "constants and equality intentionally mirror the committed legacy manifest"
+    reason = "geometry is compared exactly against the committed legacy manifest"
 )]
 
+use std::{fs, path::PathBuf};
+
+use serde::{Deserialize, Deserializer};
 use yiyin_domain::{
-    BackgroundRatio, ImageDimensions, MaskSurface, Rect, RenderOptions, RenderPlan, RenderRequest,
-    ResourceId, TaskId, TextMeasurement, TextRect,
+    BackgroundRatio, ImageDimensions, Rect, RenderOptions, RenderPlan, RenderRequest, ResourceId,
+    TaskId, TextMeasurement, TextRect,
 };
 
-struct Fixture {
-    id: &'static str,
-    input: (u32, u32),
-    text: &'static [(u32, f64)],
-    expected_canvas: (u32, u32),
-    expected_main: (u32, u32, u32, u32),
-    expected_text: &'static [(u32, u32, u32, f64)],
+/// `serde_json`'s default float parser is not correctly rounded for long decimal
+/// strings (e.g. `30.156000000000002` loses 1 ulp), so exact comparisons
+/// against the frozen manifest re-parse the raw token with `str::parse`.
+fn exact_f64<'de, D>(deserializer: D) -> Result<f64, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let raw = <Box<serde_json::value::RawValue>>::deserialize(deserializer)?;
+    raw.get().parse::<f64>().map_err(serde::de::Error::custom)
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Manifest {
+    scenarios: Vec<Scenario>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Scenario {
+    id: String,
+    exact_geometry: ExactGeometry,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ExactGeometry {
+    canvas: Canvas,
+    main_rect: RectGeometry,
+    text_rows: Vec<TextRowGeometry>,
+    #[serde(deserialize_with = "exact_f64")]
     shadow_blur: f64,
+    #[serde(deserialize_with = "exact_f64")]
     corner_radius: f64,
 }
 
-const DEFAULT_LANDSCAPE_TEXT: &[(u32, f64)] = &[(390, 51.0), (465, 47.0)];
-const DEFAULT_LANDSCAPE_ROWS: &[(u32, u32, u32, f64)] =
-    &[(1107, 1567, 390, 51.0), (1069, 1618, 465, 90.119)];
+#[derive(Deserialize)]
+struct Canvas {
+    width: u32,
+    height: u32,
+}
 
-const FIXTURES: &[Fixture] = &[
-    Fixture {
+#[derive(Deserialize)]
+struct RectGeometry {
+    x: u32,
+    y: u32,
+    width: u32,
+    height: u32,
+}
+
+#[derive(Deserialize)]
+struct TextRowGeometry {
+    x: u32,
+    y: u32,
+    width: u32,
+    #[serde(deserialize_with = "exact_f64")]
+    height: f64,
+}
+
+/// Renderer inputs the legacy capture did not freeze: the source image
+/// dimensions and the measured text extents fed into the layout engine. The
+/// expected geometry they produce lives only in the manifest.
+struct FixtureInput {
+    id: &'static str,
+    input: (u32, u32),
+    text: &'static [(u32, f64)],
+}
+
+const DEFAULT_LANDSCAPE_TEXT: &[(u32, f64)] = &[(390, 51.0), (465, 47.0)];
+
+const FIXTURE_INPUTS: &[FixtureInput] = &[
+    FixtureInput {
         id: "portrait-default",
         input: (980, 1468),
         text: &[(398, 52.0), (474, 48.0)],
-        expected_canvas: (1166, 1746),
-        expected_main: (93, 89, 980, 1468),
-        expected_text: &[(384, 1602, 398, 52.0), (346, 1654, 474, 92.064)],
-        shadow_blur: 88.08,
-        corner_radius: 30.828000000000003,
     },
-    Fixture {
+    FixtureInput {
         id: "landscape-default",
         input: (2188, 1436),
         text: DEFAULT_LANDSCAPE_TEXT,
-        expected_canvas: (2603, 1708),
-        expected_main: (208, 87, 2188, 1436),
-        expected_text: DEFAULT_LANDSCAPE_ROWS,
-        shadow_blur: 86.16,
-        corner_radius: 30.156000000000002,
     },
-    Fixture {
+    FixtureInput {
         id: "webp-default",
         input: (2188, 1436),
         text: DEFAULT_LANDSCAPE_TEXT,
-        expected_canvas: (2603, 1708),
-        expected_main: (208, 87, 2188, 1436),
-        expected_text: DEFAULT_LANDSCAPE_ROWS,
-        shadow_blur: 86.16,
-        corner_radius: 30.156000000000002,
     },
-    Fixture {
+    FixtureInput {
         id: "exif-orientation-6",
         input: (1436, 2188),
         text: &[(563, 77.0), (677, 71.0)],
-        expected_canvas: (1707, 2600),
-        expected_main: (136, 132, 1436, 2188),
-        expected_text: &[(572, 2386, 563, 77.0), (515, 2463, 677, 136.664)],
-        shadow_blur: 131.28,
-        corner_radius: 45.948,
     },
-    Fixture {
+    FixtureInput {
         id: "explicit-ratio-3x2",
         input: (980, 1468),
         text: &[(364, 47.0), (432, 43.0)],
-        expected_canvas: (2598, 1732),
-        expected_main: (809, 89, 980, 1468),
-        expected_text: &[(1117, 1602, 364, 47.0), (1083, 1649, 432, 82.636)],
-        shadow_blur: 88.08,
-        corner_radius: 30.828000000000003,
     },
-    Fixture {
+    FixtureInput {
         id: "portrait-to-landscape",
         input: (5568, 3712),
         text: &[(914, 130.0), (1108, 121.0)],
-        expected_canvas: (6614, 4409),
-        expected_main: (523, 223, 5568, 3712),
-        expected_text: &[(2850, 4047, 914, 130.0), (2753, 4177, 1108, 232.375)],
-        shadow_blur: 222.72,
-        corner_radius: 77.952,
     },
-    Fixture {
+    FixtureInput {
         id: "solid-white-no-shadow",
         input: (2188, 1436),
         text: DEFAULT_LANDSCAPE_TEXT,
-        expected_canvas: (2432, 1597),
-        expected_main: (122, 10, 2188, 1436),
-        expected_text: &[(1021, 1456, 390, 51.0), (984, 1507, 465, 90.119)],
-        shadow_blur: 0.0,
-        corner_radius: 0.0,
     },
-    Fixture {
+    FixtureInput {
         id: "blurred-shadow-radius",
         input: (2188, 1436),
         text: DEFAULT_LANDSCAPE_TEXT,
-        expected_canvas: (2603, 1708),
-        expected_main: (208, 87, 2188, 1436),
-        expected_text: DEFAULT_LANDSCAPE_ROWS,
-        shadow_blur: 86.16,
-        corner_radius: 30.156000000000002,
     },
-    Fixture {
+    FixtureInput {
         id: "built-in-equivalent-focal",
         input: (2188, 1436),
         text: &[(320, 62.0), (465, 47.0)],
-        expected_canvas: (2620, 1719),
-        expected_main: (216, 87, 2188, 1436),
-        expected_text: &[(1150, 1567, 320, 62.0), (1078, 1629, 465, 90.119)],
-        shadow_blur: 86.16,
-        corner_radius: 30.156000000000002,
     },
-    Fixture {
+    FixtureInput {
         id: "built-in-original-focal",
         input: (2188, 1436),
         text: &[(320, 62.0), (465, 47.0)],
-        expected_canvas: (2620, 1719),
-        expected_main: (216, 87, 2188, 1436),
-        expected_text: &[(1150, 1567, 320, 62.0), (1078, 1629, 465, 90.119)],
-        shadow_blur: 86.16,
-        corner_radius: 30.156000000000002,
     },
-    Fixture {
+    FixtureInput {
         id: "logo-light",
         input: (2188, 1436),
         text: &[(414, 62.0)],
-        expected_canvas: (2548, 1672),
-        expected_main: (180, 87, 2188, 1436),
-        expected_text: &[(1067, 1567, 414, 105.119)],
-        shadow_blur: 86.16,
-        corner_radius: 30.156000000000002,
     },
-    Fixture {
+    FixtureInput {
         id: "logo-dark",
         input: (2188, 1436),
         text: &[(414, 62.0)],
-        expected_canvas: (2548, 1672),
-        expected_main: (180, 87, 2188, 1436),
-        expected_text: &[(1067, 1567, 414, 105.119)],
-        shadow_blur: 86.16,
-        corner_radius: 30.156000000000002,
     },
-    Fixture {
+    FixtureInput {
         id: "custom-text-forced",
         input: (980, 1468),
         text: &[(312, 46.0)],
-        expected_canvas: (1130, 1692),
-        expected_main: (75, 89, 980, 1468),
-        expected_text: &[(409, 1602, 312, 90.064)],
-        shadow_blur: 88.08,
-        corner_radius: 30.828000000000003,
     },
-    Fixture {
+    FixtureInput {
         id: "bundled-custom-font",
         input: (2188, 1436),
         text: DEFAULT_LANDSCAPE_TEXT,
-        expected_canvas: (2603, 1708),
-        expected_main: (208, 87, 2188, 1436),
-        expected_text: DEFAULT_LANDSCAPE_ROWS,
-        shadow_blur: 86.16,
-        corner_radius: 30.156000000000002,
     },
 ];
 
+fn manifest() -> Manifest {
+    let path =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/legacy/manifest.json");
+    serde_json::from_slice(&fs::read(path).expect("read manifest")).expect("parse manifest")
+}
+
 #[test]
 fn every_legacy_fixture_has_exact_geometry() {
-    for fixture in FIXTURES {
-        let plan = RenderPlan::build(&request(fixture)).expect("fixture render plan");
-        let expected_text = fixture
-            .expected_text
+    let manifest = manifest();
+    assert_eq!(
+        manifest.scenarios.len(),
+        FIXTURE_INPUTS.len(),
+        "every manifest scenario needs renderer inputs and vice versa"
+    );
+
+    for fixture in FIXTURE_INPUTS {
+        let geometry = &manifest
+            .scenarios
             .iter()
-            .map(|&(x, y, width, height)| TextRect {
-                x,
-                y,
-                width,
-                height,
+            .find(|scenario| scenario.id == fixture.id)
+            .unwrap_or_else(|| panic!("manifest scenario {}", fixture.id))
+            .exact_geometry;
+        let plan = RenderPlan::build(&request(fixture)).expect("fixture render plan");
+        let expected_text = geometry
+            .text_rows
+            .iter()
+            .map(|row| TextRect {
+                x: row.x,
+                y: row.y,
+                width: row.width,
+                height: row.height,
             })
             .collect::<Vec<_>>();
 
         assert_eq!(
             plan.canvas,
-            ImageDimensions::new(fixture.expected_canvas.0, fixture.expected_canvas.1)
+            ImageDimensions::new(geometry.canvas.width, geometry.canvas.height)
                 .expect("fixture canvas dimensions"),
             "{} canvas",
             fixture.id,
@@ -192,39 +198,29 @@ fn every_legacy_fixture_has_exact_geometry() {
         assert_eq!(
             plan.main_rect,
             Rect {
-                x: fixture.expected_main.0,
-                y: fixture.expected_main.1,
-                width: fixture.expected_main.2,
-                height: fixture.expected_main.3,
+                x: geometry.main_rect.x,
+                y: geometry.main_rect.y,
+                width: geometry.main_rect.width,
+                height: geometry.main_rect.height,
             },
             "{} main rect",
             fixture.id,
         );
         assert_eq!(plan.text_rows, expected_text, "{} text rows", fixture.id);
         assert_eq!(
-            plan.mask_surface,
-            MaskSurface {
-                width: fixture.expected_canvas.0,
-                height: fixture.expected_canvas.1,
-                scale: 1.0,
-            },
-            "{} mask surface",
-            fixture.id,
-        );
-        assert_eq!(
-            plan.shadow_blur, fixture.shadow_blur,
+            plan.shadow_blur, geometry.shadow_blur,
             "{} shadow",
             fixture.id
         );
         assert_eq!(
-            plan.corner_radius, fixture.corner_radius,
+            plan.corner_radius, geometry.corner_radius,
             "{} radius",
             fixture.id
         );
     }
 }
 
-fn request(fixture: &Fixture) -> RenderRequest {
+fn request(fixture: &FixtureInput) -> RenderRequest {
     let mut options = RenderOptions::default();
     match fixture.id {
         "explicit-ratio-3x2" => {
@@ -260,7 +256,7 @@ fn request(fixture: &Fixture) -> RenderRequest {
 }
 
 #[test]
-fn shadow_mask_surface_is_capped_at_10240_pixels_wide() {
+fn shadow_geometry_uses_the_surface_scale_capped_at_10240_pixels_wide() {
     let request = RenderRequest::new(
         TaskId::try_from("large").expect("task id"),
         ResourceId::try_from("large").expect("resource id"),
@@ -271,6 +267,8 @@ fn shadow_mask_surface_is_capped_at_10240_pixels_wide() {
 
     let plan = RenderPlan::build(&request).expect("large render plan");
 
-    assert_eq!(plan.mask_surface.width, 10_240);
-    assert!(plan.mask_surface.scale < 1.0);
+    // The 13_440px-wide canvas exceeds the 10_240px surface cap, so the shadow
+    // and radius scale by 10_240 / 13_440 instead of 1.0.
+    assert_eq!(plan.shadow_blur, 480.06);
+    assert_eq!(plan.corner_radius, 168.021_000_000_000_04);
 }
