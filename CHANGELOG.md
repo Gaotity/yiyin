@@ -11,6 +11,10 @@
 
 - Follow-up hardening: window-drag capability, drop-error feedback, output-name reservation release, preview resource cleanup, bundle-verification scanning of large binaries, frozen-fixture benchmark wiring
 
+### 📚 Documentation
+
+- Reorganized the documentation set with attribution to `ggchivalrous/yiyin` (README, NOTICE, and a docs index) and corrected `package.json` author/repository metadata now that the repository is developed independently
+
 ## v1.6.0
 
 [compare changes](https://github.com/ggchivalrous/yiyin/compare/v1.4.4...v1.6.0)
