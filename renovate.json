@@ -1,0 +1,38 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "enabledManagers": ["npm", "cargo", "github-actions"],
+  "schedule": ["before 8am on Monday"],
+  "prConcurrentLimit": 15,
+  "minimumReleaseAge": "1 day",
+  "labels": ["dependencies"],
+  "packageRules": [
+    {
+      "matchManagers": ["npm"],
+      "addLabels": ["javascript"]
+    },
+    {
+      "matchManagers": ["cargo"],
+      "addLabels": ["rust"]
+    },
+    {
+      "matchManagers": ["github-actions"],
+      "addLabels": ["github-actions"]
+    },
+    {
+      "matchManagers": ["npm"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "npm minor and patch updates"
+    },
+    {
+      "matchManagers": ["cargo"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "cargo minor and patch updates"
+    },
+    {
+      "matchManagers": ["github-actions"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "github-actions minor and patch updates"
+    }
+  ]
+}

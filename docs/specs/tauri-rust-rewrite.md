@@ -107,7 +107,7 @@ Replace the entire runtime in one clean cutover: **Tauri 2 + Rust + React**.
 - Toolchains: Rust `1.97.0` (pinned), Node.js `24`, pnpm `11.13.0`. Frontend: React `19.2.7`, `@tauri-apps/api` `2.11.1`, Base UI, React Hook Form; tooling Vite 8, TypeScript 5.9 (strict + `noUncheckedIndexedAccess`), Biome, Vitest, Testing Library, Playwright. Rust: Tauri `2.11.5`, dialog/opener/log/single-instance plugins, serde, thiserror, Tokio, UUID, `image` (jpeg/png/webp only), `kamadak-exif`, `cosmic-text`. Dev-only: `ts-rs`, `tempfile`.
 - Selection priority: minimal dependency & supply-chain surface → ecosystem maturity & DX → performance & build speed.
 - Explicit exclusions (require an approved design change to add): Zustand, Tailwind, shadcn/ui, Sass, Zod/resolvers, Radix, React Router, TanStack Query, Axios, Sonner, Lucide, Electron, Svelte, Sharp, `db-ui`, Node sidecars, `imageproc`, Rayon, `async-trait`, WebdriverIO/Selenium npm packages, prerelease deps, Git deps.
-- Supply chain: exact pins, frozen/locked installs, 24-hour minimum release-age policy for npm and Cargo, `pnpm audit --audit-level high`, `cargo deny check`, CodeQL (JS/TS + Rust), GitHub Actions pinned to full commit SHAs, Dependabot per-ecosystem with no auto-merge.
+- Supply chain: exact pins, frozen/locked installs, 24-hour minimum release-age policy for npm and Cargo, `pnpm audit --audit-level high`, `cargo deny check`, CodeQL (JS/TS + Rust), GitHub Actions pinned to full commit SHAs, Renovate per-ecosystem with no auto-merge.
 
 ## Testing Decisions
 
