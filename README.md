@@ -1,77 +1,111 @@
-# 壹印
+# Yiyin (壹印)
 
-> 这是一个直接生成图片印框的工具
->
-> 无任何水印，本软件始终开源免费
->
-> 如果软件对你有帮助可以点个Star，或者[请我喝杯奶茶可以吗](#可以请我喝杯奶茶吗)
->
-> 如果软件的效果有什么需要改进的地方
->
-> 或者你有什么新的想法
->
-> 可以在ISSUES中提出，或者[B站私信我](https://space.bilibili.com/94829489)(本人常住B站↖(^ω^)↗)
+Yiyin is an open-source desktop application for adding configurable photo
+frames and camera metadata to images. It is free, contains no product
+watermark, and performs image processing locally.
 
-## 注意⚠️
+The application uses Tauri 2 and Rust for the desktop runtime, native
+integration, configuration, EXIF handling, task scheduling, and rendering.
+React is the presentation layer inside the system WebView.
 
-由于macOS系统更新，从`macOS 10.15`版本开始，系统会默认阻止未签名的第三方应用运行，所以如果你下载的是`macOS`版本，请在打开软件前，先在终端中运行以下命令来解除限制：
+## Features
+
+- Import JPEG, PNG, and WebP images through the native picker or drag and drop.
+- Render camera metadata, custom fields, templates, fonts, and light/dark logos.
+- Preview output before export and process two export tasks concurrently.
+- Preserve source dimensions, density, output quality, and established naming
+  behavior.
+- Keep configuration and registered resources in application-owned local
+  storage.
+
+## Install and run
+
+Download the unsigned package for your platform from the project releases.
+The migration release remains version `1.6.0`.
+
+On macOS, move `壹印.app` to `/Applications`. Because the package is unsigned,
+macOS may quarantine it. Inspect the downloaded artifact, then remove the
+quarantine attribute if you trust it:
 
 ```bash
-sudo xattr -rd com.apple.quarantine /Applications/壹印.app
+xattr -dr com.apple.quarantine /Applications/壹印.app
 ```
 
-不解除限制会提示软件已损坏，无法打开
+On Windows, SmartScreen may warn about the unsigned NSIS installer. Inspect the
+publisher and file source before choosing to continue.
 
-## 使用
+## Usage
 
-直接安装并打开软件
+Open the application, adjust the rendering options, add one or more images,
+and select `生成印框`. Enable `快速输出` to start automatically or `实时预览`
+to preview the selected image.
 
-<img src="static/软件界面.jpg" height="300" />
+<img src="static/软件界面.jpg" height="300" alt="Yiyin application window" />
 
-从 `v1.3` 版本之后所有的参数说明将在软件的参数设置中提示，只要将鼠标移动到参数后面的❓即可看到参数的作用
+<img src="static/输出印框.jpg" height="300" alt="Yiyin output workflow" />
 
-设置好选项后选择图片并点击生成印框即可输出图片
+### Example output
 
-<img src="static/输出印框.jpg" height="300" />
+Landscape:
 
-### 效果图
+<img src="static/最终效果.jpg" height="300" alt="Landscape output" />
 
-**横图效果**
+Portrait:
 
-<img src="static/最终效果.jpg" height="300" />
+<img src="static/最终效果.png" height="300" alt="Portrait output" />
 
-**竖图输出**
+Portrait converted to landscape:
 
-<img src="static/最终效果.png" height="300" />
+<img src="static/最终效果-竖转横.jpeg" height="300" alt="Portrait-to-landscape output" />
 
-**竖图转横图输出**
+### Custom fonts
 
-<img src="static/最终效果-竖转横.jpeg" height="300" />
+Use the font control in the title bar to select a bundled font or register a
+local TTF/OTF file. Registered files are copied into application-owned local
+storage and are not uploaded.
 
-以上的效果只是我个人比较常用的一些效果，通过各个参数选项搭配可以做出更多不同的效果
+<img src="static/字体列表.jpg" height="300" alt="Bundled font list" />
 
-## 自定义字体
+<img src="static/添加字体.jpg" height="300" alt="Registering a custom font" />
 
-点击顶部的 `字体选项按钮` (在恢复默认按钮左边)，点击可以看见一个默认设置的字体，这个字体是软件自带的。在列表上方有一个 `+` 按钮，点击可以上传自己的字体文件，文件只会存放在用户目录，不涉及联网。
+## Development
 
-<img src="static/字体列表.jpg" height="300" />
+Required toolchains:
 
-<img src="static/添加字体.jpg" height="300" />
+- Node.js 24
+- pnpm 11.13.0
+- Rust 1.97.0
 
-## 结尾
+Install and validate the project:
 
-> 如果软件有什么地方使用的不是很好
->
-> 可以在ISSUES中提出你宝贵的意见
->
-> 如果需要软件功能有不太好的地方也可以提建议
+```bash
+pnpm install --frozen-lockfile
+pnpm ci
+cargo fmt --check
+cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+cargo test --workspace --locked
+bash tests/architecture/dependency-boundaries.sh
+```
 
-## 可以请我喝杯奶茶吗
+Run the desktop application with `pnpm tauri dev`. Build unsigned macOS or
+Windows packages with `pnpm tauri build`. Architecture and adapter details are
+documented in [src-tauri/README.md](src-tauri/README.md).
 
-(´･ω･`)(´･ω･`)(´･ω･`)(´･ω･`)
+## Security and privacy
 
-<img src="https://user-images.githubusercontent.com/76425888/285598346-907d3716-5865-40b0-b923-bbb084caceda.JPG" height="300" />
+The application does not include telemetry, an updater, a network service, or
+a Node sidecar. React cannot access arbitrary paths, dialogs, the shell, or the
+network. Native operations are exposed through dedicated Rust commands, and
+external links use a Rust-owned allowlist.
 
-如果你对软件感兴趣或者有什么不懂的地方可以加入交流群探讨
+## Feedback
 
-**QQ群:** 718615618
+Report problems or suggestions through the project
+[issues](https://github.com/ggchivalrous/yiyin/issues), or contact the author
+through [Bilibili](https://space.bilibili.com/94829489).
+
+QQ group: `718615618`.
+
+## License
+
+Yiyin is licensed under `GPL-3.0-only`. See [LICENSE](LICENSE).

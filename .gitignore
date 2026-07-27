@@ -1,18 +1,14 @@
 node_modules
-out
-dist-electron
+.pnpm-store
 .idea
-images
 
 .DS_Store
-node_modules
 dist
 tests/coverage
+test-results
 
 # Log files
 npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
 pnpm-debug.log*
 
 # Editor directories and files
@@ -23,4 +19,9 @@ pnpm-debug.log*
 *.sln
 *.sw?
 *.lock
+!Cargo.lock
 *.local
+
+# Rust build output
+target
+src-tauri/gen/schemas

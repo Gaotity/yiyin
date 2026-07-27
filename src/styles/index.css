@@ -1,0 +1,279 @@
+@import './tokens.css';
+@import './chrome.css';
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  color: var(--text-color);
+  background: var(--background);
+  font-family:
+    ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 14px;
+}
+
+button,
+select,
+input {
+  color: inherit;
+  font: inherit;
+}
+
+button {
+  border: 0;
+}
+
+.app-shell {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  flex-direction: column;
+  background: var(--background);
+}
+
+.app-content {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  padding: 20px;
+}
+
+.app-state {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  place-content: center;
+  place-items: center;
+  gap: 12px;
+}
+
+.migration-warning {
+  padding: 10px 14px;
+  border-radius: 8px;
+  color: var(--error-color);
+  box-shadow: var(--inset-shadow);
+}
+
+.migration-warning p {
+  margin: 6px 0 0;
+}
+
+.task-list {
+  display: flex;
+  min-height: 260px;
+  flex: 1;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  padding: 10px;
+  border-radius: 8px;
+  box-shadow: var(--inset-shadow);
+}
+
+.settings-task-layout .task-list {
+  min-width: 0;
+}
+
+.task {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 80px 48px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: var(--background);
+  box-shadow: var(--raised-shadow);
+  cursor: pointer;
+  text-align: left;
+}
+
+.task.selected,
+.task:hover {
+  box-shadow: var(--inset-shadow);
+}
+
+.task span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.primary-actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 20px;
+  gap: 10px;
+}
+
+.primary-actions button,
+.button,
+.app-state button {
+  padding: 10px 20px;
+  border-radius: 8px;
+  background: var(--background);
+  box-shadow: var(--raised-shadow);
+  cursor: pointer;
+}
+
+.primary-actions button:hover,
+.button:hover,
+.app-state button:hover {
+  box-shadow: var(--inset-shadow);
+}
+
+.guide-copy {
+  position: absolute;
+  top: -16px;
+  left: 20px;
+  display: flex;
+  gap: 18px;
+  color: #8f9094;
+}
+
+.dialog-backdrop {
+  position: fixed;
+  z-index: 30;
+  inset: 0;
+  background: rgba(8, 30, 61, 0.2);
+}
+
+.dialog-viewport,
+.drawer-viewport {
+  position: fixed;
+  z-index: 31;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+
+.dialog-surface,
+.drawer-surface {
+  width: min(640px, calc(100vw - 40px));
+  max-height: calc(100vh - 40px);
+  padding: 20px;
+  overflow: auto;
+  border-radius: 10px;
+  background: var(--background);
+  box-shadow: var(--raised-shadow);
+}
+
+.drawer-viewport {
+  justify-items: end;
+}
+
+.drawer-surface {
+  width: min(520px, 90vw);
+  height: 100%;
+  max-height: 100%;
+  border-radius: 10px 0 0 10px;
+}
+
+.select-trigger {
+  min-width: 130px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  background: var(--background);
+  box-shadow: var(--raised-shadow);
+}
+
+.select-trigger,
+.select-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.select-surface {
+  min-width: var(--anchor-width);
+  padding: 5px;
+  border-radius: 6px;
+  background: var(--background);
+  box-shadow: var(--raised-shadow);
+}
+
+.select-popup-action {
+  width: 100%;
+  padding: 5px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.select-item {
+  padding: 6px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.select-item-action {
+  margin-left: auto;
+  padding: 0 4px;
+  color: #df3030;
+  cursor: pointer;
+}
+
+.select-item[data-highlighted] {
+  box-shadow: var(--inset-shadow);
+  outline: 0;
+}
+
+.switch-control,
+.radio-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.switch-control [role='switch'] {
+  width: 34px;
+  height: 18px;
+  padding: 2px;
+  border-radius: 9px;
+  background: var(--background);
+  box-shadow: var(--inset-shadow);
+}
+
+.switch-thumb {
+  display: block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--active-color);
+  transition: transform 120ms ease;
+}
+
+[role='switch'][data-checked] .switch-thumb {
+  transform: translateX(16px);
+}
+
+.radio-group {
+  display: flex;
+  gap: 12px;
+}
+
+.radio-control [role='radio'] {
+  display: grid;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  box-shadow: var(--inset-shadow);
+  place-items: center;
+}
+
+.radio-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--active-color);
+}

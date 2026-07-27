@@ -1,0 +1,11 @@
+# 11 — Tauri Boundary: DTOs, Errors, Protocol, Native Operations, and Composition
+
+**What to build:** The entire WebView-facing boundary: seventeen thin commands (`bootstrap`, `update_config`, `reset_config`, `choose_output_directory`, `open_output_directory`, `choose_images`, `register_font`, `remove_font`, `register_overlay`, `read_task_exif`, `start_tasks`, `preview_task`, `cancel_task`, `clear_tasks`, `minimize_window`, `close_window`, `open_external_url`), the single typed `task-status` event, and the `yiyin://resource/<opaque-id>` protocol. DTOs derive serde + `ts-rs` only in this layer, contain no path-like fields, and generate the committed TypeScript boundary types with drift failing the build. Errors map one-to-one to `{code, message}` with sanitization proven by injecting a private path into a source error. The protocol accepts exactly `yiyin` + `resource` + one opaque segment and rejects the full attack matrix (unknown IDs, `..`, encoded separators, extra segments, queries, symlink escapes, wrong MIME, stale records), re-resolving through the registry on every request. Native operations stay behind dedicated commands — dialogs return registered descriptors, drag-drop shares the registration use case, opening the output directory takes no path argument, external links are a closed enum with URLs hardcoded in Rust. Composition registers plugins in order (single-instance first, restore+focus on second instance), and capabilities are minimal: no `withGlobalTauri`, no DevTools, local CSP only, no generic plugin permissions.
+
+**Blocked by:** 07 — Infrastructure: Durable Configuration and Idempotent Legacy Import; 08 — Infrastructure: Resource Registry and EXIF Adapter; 09 — Infrastructure: Rust Renderer and Golden Comparisons; 10 — Infrastructure: Concurrency-Two Task Queue and Cancellation
+
+**Status:** completed
+
+- [x] `cargo test -p yiyin-desktop --locked` and `cargo check --workspace --locked` pass
+- [x] DTO generation contains no path fields and fails on drift; error sanitization test proves private paths never appear in serialized DTOs or events
+- [x] Protocol attack-matrix tests pass; capability files contain no generic permissions; plugin registration order verified

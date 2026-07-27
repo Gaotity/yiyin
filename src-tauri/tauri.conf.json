@@ -1,0 +1,46 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "壹印",
+  "version": "1.6.0",
+  "identifier": "io.github.gaotity.yiyin",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "windows": [
+      {
+        "label": "main",
+        "title": "壹印",
+        "width": 900,
+        "height": 730,
+        "minWidth": 900,
+        "minHeight": 730,
+        "maxWidth": 900,
+        "maxHeight": 730,
+        "resizable": false,
+        "decorations": false,
+        "devtools": false
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' yiyin: asset:; font-src 'self' yiyin:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src ipc: http://ipc.localhost"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["dmg", "nsis"],
+    "icon": ["../icon/icon.icns", "../icon/icon.ico"],
+    "macOS": {
+      "signingIdentity": null
+    },
+    "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": "sha256",
+      "timestampUrl": ""
+    }
+  }
+}
