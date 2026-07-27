@@ -34,7 +34,7 @@
     "@base-ui/react": "1.6.0",
     "@tauri-apps/api": "2.11.1",
     "react": "19.2.7",
-    "react-dom": "19.2.7",
+    "react-dom": "19.2.8",
     "react-hook-form": "7.81.0"
   },
   "devDependencies": {
