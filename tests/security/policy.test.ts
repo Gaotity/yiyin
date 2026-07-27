@@ -265,6 +265,7 @@ describe('GitHub automation policy', () => {
     }
     const renovate = JSON.parse(read(path)) as {
       extends?: string[]
+      enabledManagers?: string[]
       labels?: string[]
       packageRules?: {
         matchManagers?: string[]
@@ -273,6 +274,7 @@ describe('GitHub automation policy', () => {
       }[]
     }
     expect(renovate.extends).toContain('config:recommended')
+    expect(renovate.enabledManagers).toEqual(['npm', 'cargo', 'github-actions'])
     expect(renovate.labels).toContain('dependencies')
     const rules = renovate.packageRules ?? []
     expect(rules.flatMap((rule) => rule.matchManagers ?? [])).toEqual([
