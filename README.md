@@ -8,6 +8,13 @@ The application uses Tauri 2 and Rust for the desktop runtime, native
 integration, configuration, EXIF handling, task scheduling, and rendering.
 React is the presentation layer inside the system WebView.
 
+## Origin and attribution
+
+This repository is an independently maintained fork of
+[ggchivalrous/yiyin](https://github.com/ggchivalrous/yiyin), originally created
+by ggchivalrous and licensed under `GPL-3.0-only`. This fork remains under the
+same license; see [NOTICE](NOTICE) for copyright attribution.
+
 ## Features
 
 - Import JPEG, PNG, and WebP images through the native picker or drag and drop.
@@ -118,4 +125,5 @@ QQ group: `718615618`.
 
 ## License
 
-Yiyin is licensed under `GPL-3.0-only`. See [LICENSE](LICENSE).
+Yiyin is licensed under `GPL-3.0-only`. See [LICENSE](LICENSE) for the full
+text and [NOTICE](NOTICE) for upstream copyright attribution.
