@@ -10,10 +10,10 @@ React is the presentation layer inside the system WebView.
 
 ## Origin and attribution
 
-This repository is an independently maintained fork of
-[ggchivalrous/yiyin](https://github.com/ggchivalrous/yiyin), originally created
-by ggchivalrous and licensed under `GPL-3.0-only`. This fork remains under the
-same license; see [NOTICE](NOTICE) for copyright attribution.
+This project is based on [ggchivalrous/yiyin](https://github.com/ggchivalrous/yiyin),
+originally created by ggchivalrous and licensed under `GPL-3.0-only`. It is
+now developed as an independent repository under the same license; see
+[NOTICE](NOTICE) for copyright attribution.
 
 ## Features
 
@@ -118,10 +118,7 @@ external links use a Rust-owned allowlist.
 ## Feedback
 
 Report problems or suggestions through the project
-[issues](https://github.com/ggchivalrous/yiyin/issues), or contact the author
-through [Bilibili](https://space.bilibili.com/94829489).
-
-QQ group: `718615618`.
+[issues](https://github.com/Gaotity/yiyin/issues).
 
 ## License
 

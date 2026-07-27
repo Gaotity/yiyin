@@ -3,13 +3,13 @@
   "version": "1.6.0",
   "private": true,
   "type": "module",
-  "description": "A local desktop photo framing and metadata tool",
+  "description": "A local desktop photo framing and metadata tool, based on ggchivalrous/yiyin",
   "author": {
-    "name": "ggchivalrous",
-    "url": "https://github.com/ggchivalrous/yiyin"
+    "name": "Gaotity",
+    "url": "https://github.com/Gaotity"
   },
   "license": "GPL-3.0-only",
-  "repository": "https://github.com/ggchivalrous/yiyin",
+  "repository": "https://github.com/Gaotity/yiyin",
   "packageManager": "pnpm@11.13.0",
   "engines": {
     "node": "24.x",

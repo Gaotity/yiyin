@@ -13,7 +13,7 @@
 
 ### 📚 Documentation
 
-- Reorganized the documentation set with upstream attribution to `ggchivalrous/yiyin` (README, NOTICE, and a docs index)
+- Reorganized the documentation set with attribution to `ggchivalrous/yiyin` (README, NOTICE, and a docs index) and corrected `package.json` author/repository metadata now that the repository is developed independently
 
 ## v1.6.0
 
