@@ -133,6 +133,16 @@ describe('GitHub automation policy', () => {
     }
   })
 
+  it('cancels superseded runs for the same pull request', () => {
+    for (const path of requiredWorkflows) {
+      const workflow = read(path)
+      expect(workflow, path).toContain(
+        `group: \${{ github.workflow }}-\${{ github.event.pull_request.number || github.run_id }}`,
+      )
+      expect(workflow, path).toContain('cancel-in-progress: true')
+    }
+  })
+
   it('defines the required isolated quality, security, and package jobs', () => {
     if (!requiredWorkflows.every((path) => existsSync(join(root, path)))) {
       return
@@ -140,14 +150,16 @@ describe('GitHub automation policy', () => {
     const ci = read(requiredWorkflows[0] ?? '')
     const codeql = read(requiredWorkflows[1] ?? '')
     const packaging = read(requiredWorkflows[2] ?? '')
-    for (const job of [
-      'frontend-quality',
-      'rust-quality',
-      'security',
-      'golden-compatibility',
-    ]) {
+    for (const job of ['frontend-quality', 'rust-quality', 'security']) {
       expect(ci).toContain(`  ${job}:`)
     }
+    expect(ci).not.toContain('  golden-compatibility:')
+    expect(ci).not.toContain('runs-on: macos-')
+    expect(ci).toContain('cargo test --workspace --locked')
+    expect(ci).toContain('name: Upload golden rendering diffs')
+    expect(ci).toMatch(
+      /name: Upload golden rendering diffs[\s\S]*retention-days: 3/,
+    )
     expect(codeql).toContain('javascript-typescript')
     expect(codeql).toContain('rust')
     expect(packaging).toContain('  macos-package-smoke:')
@@ -174,8 +186,59 @@ describe('GitHub automation policy', () => {
     expect(packaging).toContain('--remote-debugging-port=9222')
     expect(packaging).toContain('Stop-Process -Name msedgedriver, yiyin')
     expect(packaging).toContain('name: Upload Windows smoke diagnostics')
+  })
+
+  it('runs native package checks only for relevant pull request changes', () => {
+    const packaging = read('.github/workflows/package.yml')
+    expect(packaging).toContain('  native-changes:')
+    expect(packaging).toContain('runs-on: ubuntu-latest')
+    expect(packaging).toContain('fetch-depth: 0')
+    expect(packaging).toContain(
+      'git diff --name-only -z "$BASE_SHA...$HEAD_SHA" > "$changed_files"',
+    )
+    expect(packaging).toContain('done < "$changed_files"')
+    expect(packaging).not.toContain('done < <(git diff')
+    expect(packaging).toContain('*.md|docs/*)')
+    for (const pattern of [
+      'src/*',
+      'src-tauri/*',
+      'crates/*',
+      'assets/*',
+      'icon/*',
+      'tests/fixtures/*',
+      'package.json',
+      'pnpm-lock.yaml',
+      'pnpm-workspace.yaml',
+      'Cargo.toml',
+      'Cargo.lock',
+      'rust-toolchain.toml',
+      'index.html',
+      'vite.config.mjs',
+      'tsconfig.json',
+      'scripts/verify-bundle.mjs',
+      'scripts/w3c-smoke.mjs',
+      '.github/workflows/package.yml',
+    ]) {
+      expect(packaging).toContain(pattern)
+    }
+    expect(packaging.match(/needs: native-changes/g)?.length).toBe(2)
+    expect(
+      packaging.match(
+        /if: \$\{\{ !cancelled\(\) && \(needs\['native-changes'\]\.result != 'success' \|\| needs\['native-changes'\]\.outputs\.should_run == 'true'\) \}\}/g,
+      )?.length,
+    ).toBe(2)
+  })
+
+  it('uploads only short-lived manual packages and failure diagnostics', () => {
+    const packaging = read('.github/workflows/package.yml')
     expect(packaging).toMatch(
-      /name: Upload unsigned Windows package\n\s+if: always\(\)/,
+      /name: Upload unsigned macOS packages[\s\S]*?if: github\.event_name == 'workflow_dispatch'[\s\S]*?retention-days: 7/,
+    )
+    expect(packaging).toMatch(
+      /name: Upload unsigned Windows package[\s\S]*?if: always\(\) && github\.event_name == 'workflow_dispatch'[\s\S]*?retention-days: 7/,
+    )
+    expect(packaging).toMatch(
+      /name: Upload Windows smoke diagnostics[\s\S]*?if: failure\(\)[\s\S]*?retention-days: 3/,
     )
   })
 
@@ -193,7 +256,7 @@ describe('GitHub automation policy', () => {
     }
   })
 
-  it('separates Dependabot by ecosystem and contains no auto-merge', () => {
+  it('groups minor and patch Dependabot updates within each ecosystem', () => {
     const path = '.github/dependabot.yml'
     expect(existsSync(join(root, path))).toBe(true)
     if (!existsSync(join(root, path))) {
@@ -205,6 +268,13 @@ describe('GitHub automation policy', () => {
         (match) => match[1],
       ),
     ).toEqual(['npm', 'cargo', 'github-actions'])
+    expect(dependabot.match(/minor-and-patch:/g)?.length).toBe(3)
+    expect(dependabot.match(/applies-to: "version-updates"/g)?.length).toBe(3)
+    expect(dependabot.match(/patterns:\n\s+- "\*"/g)?.length).toBe(3)
+    expect(dependabot.match(/update-types:/g)?.length).toBe(3)
+    expect(dependabot.match(/- "minor"/g)?.length).toBe(3)
+    expect(dependabot.match(/- "patch"/g)?.length).toBe(3)
+    expect(dependabot).not.toContain('- "major"')
     expect(dependabot.toLowerCase()).not.toContain('auto-merge')
   })
 

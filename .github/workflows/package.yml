@@ -4,6 +4,10 @@ on:
   pull_request:
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -14,8 +18,47 @@ env:
   CARGO_DENY_VERSION: 0.20.2
 
 jobs:
+  native-changes:
+    name: Detect native package changes
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.changes.outputs.should_run }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 0
+      - name: Detect native package inputs
+        id: changes
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [[ "${{ github.event_name }}" != "pull_request" ]]; then
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          should_run=false
+          changed_files="$RUNNER_TEMP/native-changed-files"
+          git diff --name-only -z "$BASE_SHA...$HEAD_SHA" > "$changed_files"
+          while IFS= read -r -d '' path; do
+            case "$path" in
+              *.md|docs/*)
+                ;;
+              src/*|src-tauri/*|crates/*|assets/*|icon/*|tests/fixtures/*|package.json|pnpm-lock.yaml|pnpm-workspace.yaml|Cargo.toml|Cargo.lock|rust-toolchain.toml|index.html|vite.config.mjs|tsconfig.json|scripts/verify-bundle.mjs|scripts/w3c-smoke.mjs|.github/workflows/package.yml)
+                should_run=true
+                break
+                ;;
+            esac
+          done < "$changed_files"
+
+          echo "should_run=$should_run" >> "$GITHUB_OUTPUT"
+
   macos-package-smoke:
     name: macOS package smoke
+    needs: native-changes
+    if: ${{ !cancelled() && (needs['native-changes'].result != 'success' || needs['native-changes'].outputs.should_run == 'true') }}
     runs-on: macos-15
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
@@ -45,15 +88,19 @@ jobs:
           kill "$app_pid"
           wait "$app_pid" || true
       - name: Upload unsigned macOS packages
+        if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: yiyin-macos-unsigned
           path: |
             target/release/bundle/macos
             target/release/bundle/dmg
+          retention-days: 7
 
   windows-package-and-desktop-smoke:
     name: Windows package and desktop smoke
+    needs: native-changes
+    if: ${{ !cancelled() && (needs['native-changes'].result != 'success' || needs['native-changes'].outputs.should_run == 'true') }}
     runs-on: windows-2025
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
@@ -172,10 +219,12 @@ jobs:
             ${{ runner.temp }}/msedgedriver.log
             ${{ runner.temp }}/yiyin-app-logs
           if-no-files-found: ignore
+          retention-days: 3
       - name: Upload unsigned Windows package
-        if: always()
+        if: always() && github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: yiyin-windows-unsigned
           path: target/release/bundle/nsis
           if-no-files-found: ignore
+          retention-days: 7
