@@ -10,7 +10,7 @@ the same pull request.
 
 **Blocked by:** None
 
-**Status:** in progress
+**Status:** completed
 
 - [x] Repository policy tests define the optimized workflow contract — the
   "GitHub automation policy" block in `tests/security/policy.test.ts` (all 12
@@ -28,4 +28,7 @@ the same pull request.
   run on the 90-day default retention) was deleted via API; no unsigned package
   artifacts remain and total artifact storage is ~113 KB of self-expiring
   failure diagnostics
-- [ ] Pull-request checks validate the resulting workflow behavior
+- [x] Pull-request checks validate the resulting workflow behavior — on PR #42
+  all quality, security, and CodeQL checks passed while the macOS and Windows
+  package smoke jobs were skipped by the `native-changes` gate on this docs-only
+  diff, with their required checks still satisfied
