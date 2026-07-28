@@ -13,18 +13,19 @@ the same pull request.
 **Status:** in progress
 
 - [x] Repository policy tests define the optimized workflow contract — the
-  "GitHub automation policy" block in `tests/security/policy.test.ts` (12 tests
-  green on `origin/main`)
+  "GitHub automation policy" block in `tests/security/policy.test.ts` (all 12
+  tests in the file green on `origin/main` f2cbaeb)
 - [x] CI, CodeQL, native packaging, and dependency-update configuration satisfy
   it — the Dependabot grouping item was superseded by the Renovate migration
-  (#25): `dependabot.yml` is deleted and `renovate.json` groups minor+patch per
-  ecosystem (npm, cargo, github-actions) with no auto-merge
+  (PR #25): `dependabot.yml` is deleted and `renovate.json` groups minor+patch
+  per ecosystem (npm, cargo, github-actions) with no auto-merge
 - [x] The obsolete golden required check is removed from the main ruleset —
   verified via API: ruleset "Protect main" (id 18975693) requires only Frontend
   quality, Rust quality, Security and supply chain, macOS package smoke, and
   Windows package and desktop smoke
 - [x] Existing unsigned package artifacts are deleted and storage is verified —
-  artifact listing shows no stale auto-uploaded packages; the only unsigned
-  package is a manually dispatched `yiyin-windows-unsigned` (2026-07-27,
-  7-day retention) that self-expires
+  the one remaining `yiyin-windows-unsigned` (12 MB, from a stale-branch manual
+  run on the 90-day default retention) was deleted via API; no unsigned package
+  artifacts remain and total artifact storage is ~113 KB of self-expiring
+  failure diagnostics
 - [ ] Pull-request checks validate the resulting workflow behavior
