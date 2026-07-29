@@ -1,5 +1,14 @@
-import { existsSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join, relative } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const root = process.cwd()
@@ -11,6 +20,37 @@ const packageJson = JSON.parse(read('package.json')) as {
 
 function read(path: string): string {
   return readFileSync(join(root, path), 'utf8')
+}
+
+function findHostApiImports(srcDir: string): string[] {
+  // Known limitation: commented-out imports also match — fail-closed is the
+  // safe direction for a policy scan.
+  const pattern =
+    /(?:from\s+|import\s*\(?\s*)['"`](@tauri-apps\/[^'"`]+|node:[^'"`]+)['"`]/g
+  const platformDir = join(srcDir, 'platform')
+  const hits: string[] = []
+  const walk = (dir: string): void => {
+    const entries = readdirSync(dir, { withFileTypes: true }).sort((a, b) =>
+      a.name.localeCompare(b.name),
+    )
+    for (const entry of entries) {
+      const path = join(dir, entry.name)
+      if (entry.isDirectory()) {
+        if (path !== platformDir) {
+          walk(path)
+        }
+      } else if (/\.tsx?$/.test(entry.name)) {
+        const content = readFileSync(path, 'utf8')
+        for (const match of content.matchAll(pattern)) {
+          hits.push(
+            `${relative(srcDir, path).replaceAll('\\', '/')}: ${match[1]}`,
+          )
+        }
+      }
+    }
+  }
+  walk(srcDir)
+  return hits
 }
 
 describe('dependency and desktop security policy', () => {
@@ -108,6 +148,41 @@ describe('dependency and desktop security policy', () => {
     expect(packaging).toContain(
       'cargo build -p yiyin-desktop --release --locked --features e2e-fixture,tauri/custom-protocol',
     )
+  })
+
+  it('flags @tauri-apps/api and node:* imports outside the platform layer', () => {
+    const temp = mkdtempSync(join(tmpdir(), 'yiyin-boundary-'))
+    try {
+      mkdirSync(join(temp, 'features'), { recursive: true })
+      mkdirSync(join(temp, 'platform'), { recursive: true })
+      writeFileSync(
+        join(temp, 'features', 'bad.ts'),
+        "import { invoke } from '@tauri-apps/api/core'\n",
+      )
+      writeFileSync(
+        join(temp, 'features', 'worse.ts'),
+        "import fs from 'node:fs'\n",
+      )
+      writeFileSync(
+        join(temp, 'features', 'sneaky.ts'),
+        'const api = await import(`@tauri-apps/api/event`)\n',
+      )
+      writeFileSync(
+        join(temp, 'platform', 'ok.ts'),
+        "import { invoke } from '@tauri-apps/api'\n",
+      )
+      expect(findHostApiImports(temp)).toEqual([
+        'features/bad.ts: @tauri-apps/api/core',
+        'features/sneaky.ts: @tauri-apps/api/event',
+        'features/worse.ts: node:fs',
+      ])
+    } finally {
+      rmSync(temp, { recursive: true, force: true })
+    }
+  })
+
+  it('keeps the real src tree free of host API imports outside platform', () => {
+    expect(findHostApiImports(join(root, 'src'))).toEqual([])
   })
 })
 
