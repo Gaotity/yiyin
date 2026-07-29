@@ -204,6 +204,7 @@ fn encode_config(config: &Config) -> Result<Vec<u8>, ApplicationError> {
 pub(crate) struct DecodedLegacyConfig {
     pub config: Config,
     pub image_references: Vec<LegacyImageReference>,
+    pub warnings: Vec<String>,
 }
 
 pub(crate) struct LegacyImageReference {
@@ -211,14 +212,19 @@ pub(crate) struct LegacyImageReference {
     pub source: String,
 }
 
-pub(crate) fn decode_legacy_config(
-    contents: &[u8],
-) -> Result<DecodedLegacyConfig, ApplicationError> {
-    let value: serde_json::Value =
-        serde_json::from_slice(contents).map_err(|_| ApplicationError::config_invalid())?;
-    let object = value
-        .as_object()
-        .ok_or_else(ApplicationError::config_invalid)?;
+pub(crate) fn decode_legacy_config(contents: &[u8]) -> DecodedLegacyConfig {
+    let mut warnings = Vec::new();
+    let value = serde_json::from_slice::<serde_json::Value>(contents)
+        .ok()
+        .and_then(|value| value.as_object().cloned());
+    let Some(object) = value else {
+        warnings.push("Legacy configuration is unreadable; defaults were imported.".to_owned());
+        return DecodedLegacyConfig {
+            config: Config::default(),
+            image_references: Vec::new(),
+            warnings,
+        };
+    };
     let mut known = serde_json::Map::new();
     for key in [
         "version",
@@ -240,21 +246,171 @@ pub(crate) fn decode_legacy_config(
             }
         }
     }
-    let mut stored = serde_json::from_value::<StoredConfigV1>(serde_json::Value::Object(known))
-        .map_err(|_| ApplicationError::config_invalid())?;
+
+    let defaults = Config::default();
+    let version = salvage_string(&known, "version", &defaults.version, &mut warnings);
+    let output = salvage_string(&known, "output", &defaults.output, &mut warnings);
+    let options = salvage_options(known.get("options"), &mut warnings);
     let mut image_references = Vec::new();
-    for field in stored
-        .temp_fields
-        .iter_mut()
-        .chain(&mut stored.custom_temp_fields)
-    {
-        sanitize_legacy_image_reference(&mut field.dark_image, &mut image_references)?;
-        sanitize_legacy_image_reference(&mut field.light_image, &mut image_references)?;
-    }
-    Ok(DecodedLegacyConfig {
-        config: stored.into_domain()?,
+    let mut temp_fields = salvage_fields(
+        known.get("tempFields"),
+        &mut image_references,
+        &mut warnings,
+    );
+    fill_default_fields(&mut temp_fields);
+    let custom_temp_fields = salvage_fields(
+        known.get("customTempFields"),
+        &mut image_references,
+        &mut warnings,
+    );
+    let mut templates = salvage_templates(known.get("temps"), &mut warnings);
+    fill_default_templates(&mut templates);
+
+    DecodedLegacyConfig {
+        config: Config {
+            version,
+            output,
+            options,
+            temp_fields,
+            custom_temp_fields,
+            templates,
+        },
         image_references,
-    })
+        warnings,
+    }
+}
+
+fn fill_default_fields(fields: &mut Vec<TemplateField>) {
+    for field in default_template_fields() {
+        if !fields.iter().any(|existing| existing.key() == field.key()) {
+            fields.push(field);
+        }
+    }
+}
+
+fn fill_default_templates(templates: &mut Vec<Template>) {
+    for template in default_templates() {
+        if !templates
+            .iter()
+            .any(|existing| existing.key() == template.key())
+        {
+            templates.push(template);
+        }
+    }
+}
+
+fn legacy_element_label(element: &serde_json::Value) -> String {
+    element
+        .get("key")
+        .or_else(|| element.get("name"))
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("<unnamed>")
+        .to_owned()
+}
+
+fn salvage_string(
+    known: &serde_json::Map<String, serde_json::Value>,
+    key: &str,
+    default: &str,
+    warnings: &mut Vec<String>,
+) -> String {
+    let Some(value) = known.get(key) else {
+        return default.to_owned();
+    };
+    if let Some(text) = value.as_str().filter(|text| !text.trim().is_empty()) {
+        return text.to_owned();
+    }
+    warnings.push(format!("Skipped invalid legacy value: {key}"));
+    default.to_owned()
+}
+
+fn salvage_options(value: Option<&serde_json::Value>, warnings: &mut Vec<String>) -> RenderOptions {
+    let default_options = RenderOptions::default();
+    let Some(value) = value else {
+        return default_options;
+    };
+    let Some(options) = value.as_object() else {
+        warnings.push("Skipped invalid legacy options block.".to_owned());
+        return default_options;
+    };
+    let mut salvaged = default_options;
+    for (key, field_value) in options {
+        let mut candidate = serde_json::to_value(StoredOptions::from_domain(&salvaged))
+            .expect("salvaged options serialize");
+        candidate
+            .as_object_mut()
+            .expect("options object")
+            .insert(key.clone(), field_value.clone());
+        let next = serde_json::from_value::<StoredOptions>(candidate)
+            .ok()
+            .and_then(|stored| stored.into_domain().ok());
+        match next {
+            Some(options) => salvaged = options,
+            None => warnings.push(format!("Skipped invalid legacy option: {key}")),
+        }
+    }
+    salvaged
+}
+
+fn salvage_fields(
+    value: Option<&serde_json::Value>,
+    image_references: &mut Vec<LegacyImageReference>,
+    warnings: &mut Vec<String>,
+) -> Vec<TemplateField> {
+    let Some(elements) = value.and_then(serde_json::Value::as_array) else {
+        if value.is_some() {
+            warnings.push("Skipped invalid legacy fields block.".to_owned());
+        }
+        return Vec::new();
+    };
+    let mut fields = Vec::new();
+    for element in elements {
+        let label = legacy_element_label(element);
+        let Ok(mut stored) = serde_json::from_value::<StoredField>(element.clone()) else {
+            warnings.push(format!("Skipped invalid legacy field: {label}"));
+            continue;
+        };
+        let mut field_references = Vec::new();
+        if sanitize_legacy_image_reference(&mut stored.dark_image, &mut field_references).is_err()
+            || sanitize_legacy_image_reference(&mut stored.light_image, &mut field_references)
+                .is_err()
+        {
+            warnings.push(format!("Skipped invalid legacy field: {label}"));
+            continue;
+        }
+        match stored.into_domain() {
+            Ok(field) => {
+                image_references.append(&mut field_references);
+                fields.push(field);
+            }
+            Err(_) => warnings.push(format!("Skipped invalid legacy field: {label}")),
+        }
+    }
+    fields
+}
+
+fn salvage_templates(
+    value: Option<&serde_json::Value>,
+    warnings: &mut Vec<String>,
+) -> Vec<Template> {
+    let Some(elements) = value.and_then(serde_json::Value::as_array) else {
+        if value.is_some() {
+            warnings.push("Skipped invalid legacy templates block.".to_owned());
+        }
+        return Vec::new();
+    };
+    let mut templates = Vec::new();
+    for element in elements {
+        let label = legacy_element_label(element);
+        match serde_json::from_value::<StoredTemplate>(element.clone())
+            .ok()
+            .and_then(|stored| stored.into_domain().ok())
+        {
+            Some(template) => templates.push(template),
+            None => warnings.push(format!("Skipped invalid legacy template: {label}")),
+        }
+    }
+    templates
 }
 
 fn sanitize_legacy_image_reference(
@@ -347,14 +503,7 @@ impl StoredConfigV1 {
             .into_iter()
             .map(StoredField::into_domain)
             .collect::<Result<Vec<_>, _>>()?;
-        for field in default_template_fields() {
-            if !temp_fields
-                .iter()
-                .any(|existing| existing.key() == field.key())
-            {
-                temp_fields.push(field);
-            }
-        }
+        fill_default_fields(&mut temp_fields);
 
         let custom_temp_fields = self
             .custom_temp_fields
@@ -366,14 +515,7 @@ impl StoredConfigV1 {
             .into_iter()
             .map(StoredTemplate::into_domain)
             .collect::<Result<Vec<_>, _>>()?;
-        for template in default_templates() {
-            if !templates
-                .iter()
-                .any(|existing| existing.key() == template.key())
-            {
-                templates.push(template);
-            }
-        }
+        fill_default_templates(&mut templates);
 
         Ok(Config {
             version: self.version,

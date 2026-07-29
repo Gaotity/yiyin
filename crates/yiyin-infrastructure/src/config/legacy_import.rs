@@ -84,18 +84,20 @@ pub(super) fn import_if_needed(
     let DecodedLegacyConfig {
         mut config,
         image_references,
-    } = decode_legacy_config(&config_bytes)?;
+        mut warnings,
+    } = decode_legacy_config(&config_bytes);
     let app_data = repository
         .path()
         .parent()
         .ok_or_else(|| ApplicationError::internal("configuration path has no parent"))?;
-    let (staging, staged_resources, warnings) = stage_legacy_resources(
+    let (staging, staged_resources, resource_warnings) = stage_legacy_resources(
         repository.filesystem(),
         app_data,
         source,
         image_references,
         &mut config,
     )?;
+    warnings.extend(resource_warnings);
 
     if repository
         .filesystem()
