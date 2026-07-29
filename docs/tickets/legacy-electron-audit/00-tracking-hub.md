@@ -1,7 +1,7 @@
 # 00 — Tracking Hub: Adversarial Audit Findings (Legacy Electron Tree)
 
 > **Source:** GitHub issue #26 — <https://github.com/Gaotity/yiyin/issues/26>
-> (converted to a local ticket on 2026-07-27; sub-issues #27–#39 are now
+> (converted to a local ticket on 2026-07-29; sub-issues #27–#39 are now
 > tickets `01`–`13` in this directory)
 
 **Status:** needs-triage
