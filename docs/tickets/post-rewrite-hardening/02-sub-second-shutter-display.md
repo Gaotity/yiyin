@@ -9,7 +9,7 @@ the legacy audit (`legacy-electron-audit/02-exif-formatting.md`, triaged
 
 **Blocked by:** None
 
-**Status:** ready-for-agent
+**Status:** completed
 
 ## Agent Brief
 
@@ -37,12 +37,18 @@ expected values.
   output for sub-second exposures in the affected interval
 
 **Acceptance criteria:**
-- [ ] Exposures in the (~0.67, 1.0)s interval display as trimmed decimal
-      seconds, not `1/1`
-- [ ] One second and above, and fast reciprocals like `1/125`, are unchanged
-- [ ] Unit tests pin both boundaries of the affected interval
-- [ ] Frozen fixtures referencing the old `1/1` output are updated with a
-      deliberate expectation change; the rest of the parity suite stays green
+- [x] Exposures in the (~0.67, 1.0)s interval display as trimmed decimal
+      seconds, not `1/1` — `format_shutter` falls back to `decimal()` when the
+      rounded reciprocal is 1 (`7/10` → `0.7`, `3/4` → `0.75`)
+- [x] One second and above, and fast reciprocals like `1/125`, are unchanged —
+      pinned by the existing shutter test and the new boundary cases
+- [x] Unit tests pin both boundaries of the affected interval —
+      `sub_second_shutter_above_two_thirds_displays_decimal_seconds` covers
+      `2/3` → `1/2` (boundary keeps the reciprocal) and `1/1` → `1`
+- [x] Frozen fixtures referencing the old `1/1` output are updated with a
+      deliberate expectation change; the rest of the parity suite stays green —
+      no frozen fixture pins `1/1` (verified by grep); the frozen-capture
+      parity test passes unchanged
 
 **Out of scope:**
 - The reciprocal convention for exposures below the affected interval

@@ -145,3 +145,15 @@ fn missing_and_malformed_files_map_to_stable_errors() {
         ErrorCode::FileInvalid
     );
 }
+
+#[test]
+fn sub_second_shutter_above_two_thirds_displays_decimal_seconds() {
+    assert_eq!(format_shutter(7, 10), "0.7");
+    assert_eq!(format_shutter(4, 5), "0.8");
+    assert_eq!(format_shutter(3, 4), "0.75");
+    // At and below the two-thirds boundary the legacy reciprocal stays.
+    assert_eq!(format_shutter(2, 3), "1/2");
+    assert_eq!(format_shutter(5, 8), "1/2");
+    // One second and above keep the seconds display.
+    assert_eq!(format_shutter(1, 1), "1");
+}

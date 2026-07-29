@@ -255,8 +255,12 @@ pub fn format_shutter(numerator: u32, denominator: u32) -> String {
     }
     let seconds = f64::from(numerator) / f64::from(denominator);
     if seconds < 1.0 {
-        let reciprocal = (1.0 / seconds).round();
-        format!("1/{reciprocal:.0}")
+        let reciprocal = 1.0 / seconds;
+        if reciprocal < 1.5 {
+            decimal(seconds)
+        } else {
+            format!("1/{:.0}", reciprocal.round())
+        }
     } else {
         decimal(seconds)
     }
