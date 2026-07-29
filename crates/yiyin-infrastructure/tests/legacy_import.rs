@@ -284,3 +284,99 @@ fn unsupported_symlink_is_skipped_with_a_safe_warning() {
     assert!(outcome.warnings()[0].contains("external-link"));
     assert!(!outcome.warnings()[0].contains("/private/external"));
 }
+
+#[test]
+fn one_invalid_option_falls_back_to_its_default_without_losing_valid_settings() {
+    let harness = Harness::new();
+    let root = harness.support.join("壹印");
+    fs::create_dir_all(&root).expect("legacy root");
+    fs::write(
+        root.join("config.json"),
+        r#"{"version":"1.6.0","output":"/legacy/output","options":{"iot":true,"quality":0,"radius":4.5},"tempFields":[],"customTempFields":[],"temps":[]}"#,
+    )
+    .expect("legacy config");
+
+    let outcome = harness
+        .repository()
+        .import_legacy_if_needed()
+        .expect("import must not fail on one invalid option");
+
+    assert!(
+        outcome
+            .warnings()
+            .iter()
+            .any(|warning| warning.contains("quality")),
+        "a warning names the skipped option: {:?}",
+        outcome.warnings()
+    );
+    let config = harness.repository().load().expect("load config");
+    assert_eq!(config.output, "/legacy/output");
+    assert!(config.options.iot);
+    assert_eq!(config.options.quality.get(), 100);
+    assert_eq!(
+        config.options.radius,
+        yiyin_domain::Radius::try_from(4.5).expect("valid radius")
+    );
+}
+
+#[test]
+fn an_unreadable_legacy_config_imports_as_defaults_with_a_warning() {
+    let harness = Harness::new();
+    let root = harness.support.join("壹印");
+    fs::create_dir_all(&root).expect("legacy root");
+    fs::write(root.join("config.json"), b"this is not json").expect("legacy config");
+
+    let outcome = harness
+        .repository()
+        .import_legacy_if_needed()
+        .expect("import must not fail on an unreadable config");
+
+    assert!(!outcome.warnings().is_empty());
+    let config = harness.repository().load().expect("load config");
+    assert_eq!(config, yiyin_domain::Config::default());
+    assert_eq!(
+        fs::read(root.join("config.json")).expect("source bytes"),
+        b"this is not json"
+    );
+}
+
+#[test]
+fn a_broken_template_is_skipped_while_valid_templates_import() {
+    let harness = Harness::new();
+    let root = harness.support.join("壹印");
+    fs::create_dir_all(&root).expect("legacy root");
+    fs::write(
+        root.join("config.json"),
+        r#"{"version":"1.6.0","output":"/legacy/output","options":{"iot":false},"tempFields":[],"customTempFields":[],"temps":[{"key":"my-temp","name":"Mine","temp":"{Make}","use":true,"type":"custom","font":{"size":2.0},"verticalAlign":"baseline"},{"key":"broken-temp","name":"Broken","temp":"{Model}","use":true,"type":"custom","font":{"size":-3.0},"verticalAlign":"baseline"}]}"#,
+    )
+    .expect("legacy config");
+
+    let outcome = harness
+        .repository()
+        .import_legacy_if_needed()
+        .expect("import must not fail on one broken template");
+
+    assert!(
+        outcome
+            .warnings()
+            .iter()
+            .any(|warning| warning.contains("broken-temp") || warning.contains("Broken")),
+        "a warning names the skipped template: {:?}",
+        outcome.warnings()
+    );
+    let config = harness.repository().load().expect("load config");
+    assert!(
+        config
+            .templates
+            .iter()
+            .any(|template| template.key() == "my-temp"),
+        "the valid custom template imports"
+    );
+    assert!(
+        !config
+            .templates
+            .iter()
+            .any(|template| template.key() == "broken-temp"),
+        "the broken template is skipped"
+    );
+}

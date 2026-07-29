@@ -191,7 +191,10 @@ impl AppState {
                 },
             ),
         );
-        config_repository.import_legacy_if_needed()?;
+        let import_outcome = config_repository.import_legacy_if_needed()?;
+        for warning in import_outcome.warnings() {
+            log::warn!("legacy import: {warning}");
+        }
         let config = config_repository.load()?;
         let output_root = resolve_output_root(app, &config.output)?;
         let output = Arc::new(NativeOutputDirectory::new(output_root)?);
