@@ -15,7 +15,7 @@ A value exactly as a metadata source (EXIF tag, future XMP/ffprobe source) repor
 _Avoid_: raw EXIF, tag value
 
 **Normalized display value**:
-The canonical string form of a metadata field after domain-owned normalization rules (vendor name washing, Nikon `ℤ`/Roman numerals, Sony `α`, shutter `1/N`, etc.). Produced by `yiyin-domain`, applied by the application layer after the `MetadataReader` port returns raw extracted values; this is what templates render.
+The canonical string form of a metadata field after domain-owned normalization rules (vendor name washing, Nikon `ℤ`/Roman numerals, Sony `α`, shutter `1/N` — sub-second exposures above 2/3s render as trimmed decimal seconds like `0.7` — etc.). Produced by `yiyin-domain`, applied by the application layer after the `MetadataReader` port returns raw extracted values; this is what templates render.
 _Avoid_: formatted EXIF, display string
 
 ### Configuration
