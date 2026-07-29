@@ -26,7 +26,7 @@ function findHostApiImports(srcDir: string): string[] {
   // Known limitation: commented-out imports also match — fail-closed is the
   // safe direction for a policy scan.
   const pattern =
-    /(?:from\s+|import\s*\(?\s*)['"](@tauri-apps\/[^'"]+|node:[^'"]+)['"]/g
+    /(?:from\s+|import\s*\(?\s*)['"`](@tauri-apps\/[^'"`]+|node:[^'"`]+)['"`]/g
   const platformDir = join(srcDir, 'platform')
   const hits: string[] = []
   const walk = (dir: string): void => {
@@ -42,7 +42,9 @@ function findHostApiImports(srcDir: string): string[] {
       } else if (/\.tsx?$/.test(entry.name)) {
         const content = readFileSync(path, 'utf8')
         for (const match of content.matchAll(pattern)) {
-          hits.push(`${relative(srcDir, path)}: ${match[1]}`)
+          hits.push(
+            `${relative(srcDir, path).replaceAll('\\', '/')}: ${match[1]}`,
+          )
         }
       }
     }
@@ -162,11 +164,16 @@ describe('dependency and desktop security policy', () => {
         "import fs from 'node:fs'\n",
       )
       writeFileSync(
+        join(temp, 'features', 'sneaky.ts'),
+        'const api = await import(`@tauri-apps/api/event`)\n',
+      )
+      writeFileSync(
         join(temp, 'platform', 'ok.ts'),
         "import { invoke } from '@tauri-apps/api'\n",
       )
       expect(findHostApiImports(temp)).toEqual([
         'features/bad.ts: @tauri-apps/api/core',
+        'features/sneaky.ts: @tauri-apps/api/event',
         'features/worse.ts: node:fs',
       ])
     } finally {
