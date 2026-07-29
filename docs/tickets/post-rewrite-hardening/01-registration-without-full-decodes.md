@@ -13,7 +13,7 @@ scope corrected after codex review on PR #44).
 
 **Blocked by:** None
 
-**Status:** ready-for-agent
+**Status:** completed
 
 ## Agent Brief
 
@@ -43,13 +43,23 @@ accepting `origin_wh_output` and ignores it.
   DTO field removed; legacy import tolerates the key as ignored
 
 **Acceptance criteria:**
-- [ ] A fixture with valid headers but corrupted pixel data registers
-      successfully (proves registration never fully decodes)
-- [ ] Batch registration via the image picker executes off the async runtime,
-      consistent with the drag-drop path
-- [ ] `originalDimensions` is absent from the generated config DTO; legacy
-      import and schema-compat tests pass
-- [ ] Golden-rendering and legacy-parity suites stay green
+- [x] A fixture with valid headers but corrupted pixel data registers
+      successfully (proves registration never fully decodes) —
+      `registration_reads_dimensions_from_headers_without_full_pixel_decode`
+      truncates a PNG at the first IDAT byte and asserts registration with the
+      intact file's dimensions; the fixture self-asserts that a full decode
+      fails on it (JPEG cannot discriminate — its decoder gray-fills truncated
+      scans)
+- [x] Batch registration via the image picker executes off the async runtime,
+      consistent with the drag-drop path — `choose_images` now runs
+      registration through `run_blocking`, pinned by
+      `image_registration_runs_outside_the_tauri_main_thread`
+- [x] `originalDimensions` is absent from the generated config DTO; legacy
+      import and schema-compat tests pass — the field is removed from
+      `RenderOptionsDto` and both generated bindings, with the dto sync test
+      forbidding its return; `origin_wh_output` stays domain-owned and is
+      preserved from the current config on apply
+- [x] Golden-rendering and legacy-parity suites stay green
 
 **Out of scope:**
 - The render pipeline's single decode per render (accepted as designed)

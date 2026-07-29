@@ -26,8 +26,10 @@ pub async fn choose_images(
     app: AppHandle<Wry>,
     state: State<'_, AppState>,
 ) -> CommandResult<Vec<TaskDescriptorDto>> {
+    let dialog_app = app.clone();
     let selected = tauri::async_runtime::spawn_blocking(move || {
-        app.dialog()
+        dialog_app
+            .dialog()
             .file()
             .add_filter("Images", &["jpg", "jpeg", "png", "webp"])
             .blocking_pick_files()
@@ -44,7 +46,7 @@ pub async fn choose_images(
                 .map_err(|_| yiyin_application::ApplicationError::file_invalid())
         })
         .collect::<Result<Vec<_>, _>>()?;
-    register_image_paths(&state, &paths)
+    run_blocking(app, move |state| register_image_paths(state, &paths)).await
 }
 
 pub(crate) fn register_image_paths(

@@ -329,3 +329,45 @@ fn removing_generated_resources_deletes_only_preview_cache_files() {
     assert!(!preview.exists());
     assert!(output.exists());
 }
+
+#[test]
+fn registration_reads_dimensions_from_headers_without_full_pixel_decode() {
+    let harness = Harness::new();
+    let intact = harness.copy_fixture("portrait-default.png", "intact.png");
+    let expected = harness
+        .registry
+        .register_input(&intact)
+        .expect("register intact image")
+        .dimensions()
+        .expect("intact dimensions");
+
+    // Truncate at the first IDAT data byte: the header is complete, but the
+    // pixel data is gone. (JPEG cannot serve here — its decoder gray-fills
+    // truncated scans and still returns Ok, so it cannot discriminate.)
+    let bytes = fs::read(&intact).expect("read intact fixture");
+    let mut cursor = 8usize; // skip the PNG signature
+    let idat_data_start = loop {
+        let chunk_length =
+            u32::from_be_bytes(bytes[cursor..cursor + 4].try_into().expect("chunk length"))
+                as usize;
+        if &bytes[cursor + 4..cursor + 8] == b"IDAT" {
+            break cursor + 8;
+        }
+        cursor += 8 + chunk_length + 4;
+    };
+    let truncated = harness.inputs.join("truncated.png");
+    fs::write(&truncated, &bytes[..idat_data_start]).expect("write truncated fixture");
+
+    assert!(
+        image::load_from_memory_with_format(&bytes[..idat_data_start], image::ImageFormat::Png)
+            .is_err(),
+        "the fixture must fail a full pixel decode to keep this test discriminating"
+    );
+
+    let record = harness
+        .registry
+        .register_input(&truncated)
+        .expect("registration must not require a full pixel decode");
+
+    assert_eq!(record.dimensions(), Some(expected));
+}

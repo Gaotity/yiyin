@@ -35,3 +35,12 @@ fn blocking_command_helper_uses_the_tauri_blocking_pool() {
     let source = include_str!("../src/commands/mod.rs");
     assert!(source.contains("tauri::async_runtime::spawn_blocking"));
 }
+
+#[test]
+fn image_registration_runs_outside_the_tauri_main_thread() {
+    let source = include_str!("../src/commands/resources.rs");
+    assert!(
+        command_body(source, "choose_images").contains("run_blocking"),
+        "choose_images must move batch image registration off the Tauri main thread"
+    );
+}

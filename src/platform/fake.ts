@@ -47,7 +47,6 @@ export function defaultBootstrap(
         landscape: false,
         solidBackground: false,
         solidColor: '#fff',
-        originalDimensions: false,
         radius: 2.1,
         radiusVisible: true,
         shadow: 6,

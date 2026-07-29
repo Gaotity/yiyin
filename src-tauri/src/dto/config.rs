@@ -230,7 +230,6 @@ pub struct RenderOptionsDto {
     pub landscape: bool,
     pub solid_background: bool,
     pub solid_color: String,
-    pub original_dimensions: bool,
     pub radius: f64,
     pub radius_visible: bool,
     pub shadow: f64,
@@ -253,7 +252,6 @@ impl From<&RenderOptions> for RenderOptionsDto {
             landscape: value.landscape,
             solid_background: value.solid_background,
             solid_color: value.solid_color.as_str().to_owned(),
-            original_dimensions: value.origin_wh_output,
             radius: value.radius.get(),
             radius_visible: value.radius_visible,
             shadow: value.shadow.get(),
@@ -274,35 +272,35 @@ impl From<&RenderOptions> for RenderOptionsDto {
     }
 }
 
-impl TryFrom<RenderOptionsDto> for RenderOptions {
-    type Error = ApplicationError;
-
-    fn try_from(value: RenderOptionsDto) -> Result<Self, Self::Error> {
+impl RenderOptionsDto {
+    /// Converts presentation-owned options back to the domain, preserving the
+    /// Rust-owned `origin_wh_output` invariant from the current configuration.
+    fn apply_to(self, current: &RenderOptions) -> Result<RenderOptions, ApplicationError> {
         let invalid = |_| ApplicationError::config_invalid();
-        Ok(Self {
-            iot: value.quick_output,
-            landscape: value.landscape,
-            solid_background: value.solid_background,
-            solid_color: SolidColor::try_from(value.solid_color.as_str()).map_err(invalid)?,
-            origin_wh_output: value.original_dimensions,
-            radius: Radius::try_from(value.radius).map_err(invalid)?,
-            radius_visible: value.radius_visible,
-            shadow: Shadow::try_from(value.shadow).map_err(invalid)?,
-            shadow_visible: value.shadow_visible,
-            background_ratio_visible: value.background_ratio_visible,
+        Ok(RenderOptions {
+            iot: self.quick_output,
+            landscape: self.landscape,
+            solid_background: self.solid_background,
+            solid_color: SolidColor::try_from(self.solid_color.as_str()).map_err(invalid)?,
+            origin_wh_output: current.origin_wh_output,
+            radius: Radius::try_from(self.radius).map_err(invalid)?,
+            radius_visible: self.radius_visible,
+            shadow: Shadow::try_from(self.shadow).map_err(invalid)?,
+            shadow_visible: self.shadow_visible,
+            background_ratio_visible: self.background_ratio_visible,
             background_ratio: BackgroundRatio::try_from((
-                value.background_ratio.width,
-                value.background_ratio.height,
+                self.background_ratio.width,
+                self.background_ratio.height,
             ))
             .map_err(invalid)?,
-            font: FontFamily::try_from(value.font.as_str()).map_err(invalid)?,
-            main_image_width: MainImageWidth::try_from(value.main_image_width).map_err(invalid)?,
-            text_margin: TextMargin::try_from(value.text_margin).map_err(invalid)?,
-            quality: Quality::try_from(value.quality).map_err(invalid)?,
-            mini_top_bottom_margin: MiniTopBottomMargin::try_from(value.mini_top_bottom_margin)
+            font: FontFamily::try_from(self.font.as_str()).map_err(invalid)?,
+            main_image_width: MainImageWidth::try_from(self.main_image_width).map_err(invalid)?,
+            text_margin: TextMargin::try_from(self.text_margin).map_err(invalid)?,
+            quality: Quality::try_from(self.quality).map_err(invalid)?,
+            mini_top_bottom_margin: MiniTopBottomMargin::try_from(self.mini_top_bottom_margin)
                 .map_err(invalid)?,
-            background_blur: BackgroundBlur::try_from(value.background_blur).map_err(invalid)?,
-            preview_visible: value.preview_visible,
+            background_blur: BackgroundBlur::try_from(self.background_blur).map_err(invalid)?,
+            preview_visible: self.preview_visible,
         })
     }
 }
@@ -344,7 +342,7 @@ impl PublicConfigDto {
         Ok(Config {
             version: current.version.clone(),
             output: current.output.clone(),
-            options: self.options.try_into()?,
+            options: self.options.apply_to(&current.options)?,
             temp_fields: convert_fields(self.template_fields, true)?,
             custom_temp_fields: convert_fields(self.custom_template_fields, false)?,
             templates: convert_templates(self.templates)?,

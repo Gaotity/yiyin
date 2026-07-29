@@ -4,7 +4,7 @@ export type BootstrapDto = { config: PublicConfigDto, resources: Array<ResourceD
 
 export type PublicConfigDto = { version: string, options: RenderOptionsDto, templateFields: Array<TemplateFieldDto>, customTemplateFields: Array<TemplateFieldDto>, templates: Array<TemplateDto>, };
 
-export type RenderOptionsDto = { quickOutput: boolean, landscape: boolean, solidBackground: boolean, solidColor: string, originalDimensions: boolean, radius: number, radiusVisible: boolean, shadow: number, shadowVisible: boolean, backgroundRatioVisible: boolean, backgroundRatio: BackgroundRatioDto, font: string, mainImageWidth: number, textMargin: number, quality: number, miniTopBottomMargin: number, backgroundBlur: number, previewVisible: boolean, };
+export type RenderOptionsDto = { quickOutput: boolean, landscape: boolean, solidBackground: boolean, solidColor: string, radius: number, radiusVisible: boolean, shadow: number, shadowVisible: boolean, backgroundRatioVisible: boolean, backgroundRatio: BackgroundRatioDto, font: string, mainImageWidth: number, textMargin: number, quality: number, miniTopBottomMargin: number, backgroundBlur: number, previewVisible: boolean, };
 
 export type BackgroundRatioDto = { width: number, height: number, };
 
