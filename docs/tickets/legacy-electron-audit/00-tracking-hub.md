@@ -4,7 +4,24 @@
 > (converted to a local ticket on 2026-07-29; sub-issues #27–#39 are now
 > tickets `01`–`13` in this directory)
 
-**Status:** needs-triage
+**Status:** completed (triaged 2026-07-29)
+
+## Triage outcome (2026-07-29)
+
+All 13 tickets were verified against current `main` (the post-rewrite
+Tauri/Rust/React tree); per-checkbox evidence lives in each ticket's Triage
+notes.
+
+- **wontfix — already implemented (9):** `03`, `04`, `05`, `06`, `08`, `09`,
+  `10`, `11`, `12` — every live-relevant finding is handled in the rewrite,
+  with tests.
+- **wontfix — restated (4):** the surviving findings became new tickets under
+  `docs/tickets/post-rewrite-hardening/`:
+  - `01` → `01-registration-without-full-decodes.md` (ready-for-agent)
+  - `02` → `02-sub-second-shutter-display.md` (ready-for-agent)
+  - `07` → `03-renderer-import-boundary-guardrail.md` (ready-for-agent)
+  - `13` → `04-dangling-v1.7.0-tag.md` (ready-for-human — tag mutation and
+    version-line decision)
 
 > **Read first — codebase validity.** This audit ran against `7e115bb` on
 > `codex/harden-project-foundation`, the **pre-rewrite Electron/Svelte tree**
