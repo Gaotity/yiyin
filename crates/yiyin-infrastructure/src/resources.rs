@@ -5,7 +5,6 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-use image::GenericImageView;
 use serde::{Deserialize, Serialize};
 use yiyin_application::{
     ApplicationError, IdGenerator, MetadataReader, ResourceRecord, ResourceRepository,
@@ -501,9 +500,9 @@ fn inspect_image(bytes: &[u8], path: &Path) -> Result<InspectedFile, Application
         return Err(ApplicationError::file_invalid());
     };
     validate_extension(path, extension, format == image::ImageFormat::Jpeg)?;
-    let decoded = image::load_from_memory_with_format(bytes, format)
+    let (width, height) = image::ImageReader::with_format(std::io::Cursor::new(bytes), format)
+        .into_dimensions()
         .map_err(|_| ApplicationError::file_invalid())?;
-    let (width, height) = decoded.dimensions();
     Ok(InspectedFile {
         mime_type,
         extension,

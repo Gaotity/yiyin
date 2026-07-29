@@ -23,6 +23,17 @@ fn generated_types_are_current_and_have_no_private_path_fields() {
 }
 
 #[test]
+fn generated_types_do_not_expose_rust_owned_dead_fields() {
+    let generated = dto_under_test::generated_types();
+    for forbidden in ["originalDimensions", "original_dimensions"] {
+        assert!(
+            !generated.contains(forbidden),
+            "rust-owned field {forbidden} must not cross the DTO"
+        );
+    }
+}
+
+#[test]
 fn public_config_round_trip_preserves_rust_owned_output_and_system_invariants() {
     let current = yiyin_domain::Config::default();
     let mut dto = dto_under_test::PublicConfigDto::from(&current);
