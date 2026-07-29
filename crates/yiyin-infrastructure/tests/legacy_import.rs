@@ -380,3 +380,75 @@ fn a_broken_template_is_skipped_while_valid_templates_import() {
         "the broken template is skipped"
     );
 }
+
+#[test]
+fn a_dropped_field_commits_no_image_reference() {
+    let harness = Harness::new();
+    let root = harness.support.join("壹印");
+    fs::create_dir_all(root.join("static")).expect("static dir");
+    let image = root.join("static/overlay.png");
+    fs::write(&image, b"overlay bytes").expect("static file");
+    fs::write(
+        root.join("config.json"),
+        format!(
+            r#"{{"version":"1.6.0","output":"/legacy/output","options":{{}},"tempFields":[{{"key":"Make","name":"Make","type":"img","bImg":"{}","wImg":"","font":{{"use":true,"size":-1.0}}}}],"customTempFields":[],"temps":[]}}"#,
+            image.to_string_lossy()
+        ),
+    )
+    .expect("legacy config");
+
+    let outcome = harness
+        .repository()
+        .import_legacy_if_needed()
+        .expect("import must not fail on one invalid field");
+
+    assert!(
+        outcome
+            .warnings()
+            .iter()
+            .any(|warning| warning.contains("Make")),
+        "a warning names the skipped field: {:?}",
+        outcome.warnings()
+    );
+    assert!(
+        !harness.resources.join("legacy-resources.json").exists(),
+        "no resource manifest is committed for a dropped field's image"
+    );
+}
+
+#[test]
+fn blank_version_and_output_fall_back_to_defaults_with_warnings() {
+    let harness = Harness::new();
+    let root = harness.support.join("壹印");
+    fs::create_dir_all(&root).expect("legacy root");
+    fs::write(
+        root.join("config.json"),
+        r#"{"version":"   ","output":"  ","options":{},"tempFields":[],"customTempFields":[],"temps":[]}"#,
+    )
+    .expect("legacy config");
+
+    let outcome = harness
+        .repository()
+        .import_legacy_if_needed()
+        .expect("import must not fail on blank strings");
+
+    assert!(
+        outcome
+            .warnings()
+            .iter()
+            .any(|warning| warning.contains("version")),
+        "a warning names version: {:?}",
+        outcome.warnings()
+    );
+    assert!(
+        outcome
+            .warnings()
+            .iter()
+            .any(|warning| warning.contains("output")),
+        "a warning names output: {:?}",
+        outcome.warnings()
+    );
+    let config = harness.repository().load().expect("load config");
+    assert_eq!(config.version, "1.6.0");
+    assert_eq!(config.output, "Pictures/watermark");
+}

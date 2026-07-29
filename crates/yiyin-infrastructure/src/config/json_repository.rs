@@ -317,7 +317,7 @@ fn salvage_string(
     let Some(value) = known.get(key) else {
         return default.to_owned();
     };
-    if let Some(text) = value.as_str() {
+    if let Some(text) = value.as_str().filter(|text| !text.trim().is_empty()) {
         return text.to_owned();
     }
     warnings.push(format!("Skipped invalid legacy value: {key}"));
@@ -370,14 +370,19 @@ fn salvage_fields(
             warnings.push(format!("Skipped invalid legacy field: {label}"));
             continue;
         };
-        if sanitize_legacy_image_reference(&mut stored.dark_image, image_references).is_err()
-            || sanitize_legacy_image_reference(&mut stored.light_image, image_references).is_err()
+        let mut field_references = Vec::new();
+        if sanitize_legacy_image_reference(&mut stored.dark_image, &mut field_references).is_err()
+            || sanitize_legacy_image_reference(&mut stored.light_image, &mut field_references)
+                .is_err()
         {
             warnings.push(format!("Skipped invalid legacy field: {label}"));
             continue;
         }
         match stored.into_domain() {
-            Ok(field) => fields.push(field),
+            Ok(field) => {
+                image_references.append(&mut field_references);
+                fields.push(field);
+            }
             Err(_) => warnings.push(format!("Skipped invalid legacy field: {label}")),
         }
     }
