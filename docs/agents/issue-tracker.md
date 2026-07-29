@@ -6,11 +6,11 @@ Tickets and PRDs for this repo are **local Markdown files committed with the cod
 
 - **Layout**: one directory per feature (`docs/tickets/<feature-slug>/`), one file per ticket named `NN-<slug>.md`, numbered from `01` in dependency order (e.g. `docs/tickets/tauri-rust-rewrite/`).
 - **Ticket format**: a `# NN — <title>` heading, a `**What to build:**` paragraph, `**Blocked by:**` (ticket numbers or `None`), `**Status:**`, and a `- [ ]` checklist.
-- **Status values**: `needs-triage` for raw incoming items, `in progress` once claimed, `completed` when the delivering PR merges. The triage-role vocabulary lives in `docs/agents/triage-labels.md`.
+- **Status values**: `needs-triage` for raw incoming items, `in progress` once claimed, `completed` when the delivering PR merges, `wontfix — <reason>` when triaged away (also terminal). The triage-role vocabulary lives in `docs/agents/triage-labels.md`.
 - **Create a ticket**: write the file in the feature directory and commit it — either with the work it describes or as a standalone docs commit.
 - **Read a ticket**: read the file.
-- **List open tickets**: `grep -r '^\*\*Status:\*\*' docs/tickets` — anything not `completed` is open.
-- **Close a ticket**: set `**Status:** completed` and check every checkbox (with evidence notes) in the PR that delivers the work, so the ticket state lands on `main` together with the code.
+- **List open tickets**: `grep -r '^\*\*Status:\*\*' docs/tickets` — anything not `completed` and not `wontfix` is open.
+- **Close a ticket**: set `**Status:** completed` and check every checkbox (with evidence notes) in the PR that delivers the work, so the ticket state lands on `main` together with the code. A ticket closed without delivery gets `**Status:** wontfix — <reason>` with the evidence recorded in its triage notes.
 
 ## Pull requests as a triage surface
 
@@ -39,6 +39,6 @@ Used by `/wayfinder`. The **map** is a hub ticket file in the feature directory 
 - **Map**: a `00-<slug>.md` hub file in the feature directory.
 - **Child ticket**: a numbered ticket file listed in the hub's index. Where a finding cluster has no hub yet, create the directory with the first ticket and add the hub when the map forms.
 - **Blocking**: the `**Blocked by:**` line in each child file. A ticket is unblocked when every listed blocker reads `**Status:** completed`.
-- **Frontier query**: scan the hub's index for child files whose status is not `completed` and whose blockers are all completed; first in hub order wins.
+- **Frontier query**: scan the hub's index for child files whose status is neither `completed` nor `wontfix` and whose blockers are all completed; first in hub order wins.
 - **Claim**: set the child's `**Status:** in progress` — the session's first write to that file.
 - **Resolve**: record the answer in the child file, set `**Status:** completed`, then append a context pointer to the hub's Decisions-so-far.
