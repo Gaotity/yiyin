@@ -1,47 +1,44 @@
-# Issue tracker: GitHub (Issues currently disabled — local files in effect)
+# Issue tracker: local files under `docs/tickets/`
 
-> **Repo override (2026-07):** GitHub Issues are **disabled** on `Gaotity/yiyin`. Until they are re-enabled, tickets live as **local files under `docs/tickets/<feature-slug>/`** — one file per ticket, numbered from `01` in dependency order, with "Blocked by" and "Status" recorded as text in each file (e.g. `docs/tickets/tauri-rust-rewrite/`). Skills that say "publish to the issue tracker" should write those files, not call `gh issue create`. If Issues are re-enabled later, the GitHub conventions below apply unchanged.
-
-Issues and PRDs for this repo live as GitHub issues. Use the `gh` CLI for all operations.
+Tickets and PRDs for this repo are **local Markdown files committed with the code**. GitHub Issues is enabled on `Gaotity/yiyin` but is **not** the canonical tracker: the legacy-tree audit issues #26–#39 were converted to `docs/tickets/legacy-electron-audit/` on 2026-07-29, and new work is tracked locally. Pull requests remain on GitHub — use the `gh` CLI for PR operations.
 
 ## Conventions
 
-- **Create an issue**: `gh issue create --title "..." --body "..."`. Use a heredoc for multi-line bodies.
-- **Read an issue**: `gh issue view <number> --comments`, filtering comments by `jq` and also fetching labels.
-- **List issues**: `gh issue list --state open --json number,title,body,labels,comments --jq '[.[] | {number, title, body, labels: [.labels[].name], comments: [.comments[].body]}]'` with appropriate `--label` and `--state` filters.
-- **Comment on an issue**: `gh issue comment <number> --body "..."`
-- **Apply / remove labels**: `gh issue edit <number> --add-label "..."` / `--remove-label "..."`
-- **Close**: `gh issue close <number> --comment "..."`
-
-Infer the repo from `git remote -v` — `gh` does this automatically when run inside a clone.
+- **Layout**: one directory per feature (`docs/tickets/<feature-slug>/`), one file per ticket named `NN-<slug>.md`, numbered from `01` in dependency order (e.g. `docs/tickets/tauri-rust-rewrite/`).
+- **Ticket format**: a `# NN — <title>` heading, a `**What to build:**` paragraph, `**Blocked by:**` (ticket numbers or `None`), `**Status:**`, and a `- [ ]` checklist.
+- **Status values**: `needs-triage` for raw incoming items, `in progress` once claimed, `completed` when the delivering PR merges. The triage-role vocabulary lives in `docs/agents/triage-labels.md`.
+- **Create a ticket**: write the file in the feature directory and commit it — either with the work it describes or as a standalone docs commit.
+- **Read a ticket**: read the file.
+- **List open tickets**: `grep -r '^\*\*Status:\*\*' docs/tickets` — anything not `completed` is open.
+- **Close a ticket**: set `**Status:** completed` and check every checkbox (with evidence notes) in the PR that delivers the work, so the ticket state lands on `main` together with the code.
 
 ## Pull requests as a triage surface
 
 **PRs as a request surface: no.** _(Set to `yes` if this repo treats external PRs as feature requests; `/triage` reads this flag.)_
 
-When set to `yes`, PRs run through the same labels and states as issues, using the `gh pr` equivalents:
+When set to `yes`, PRs run through the same roles as tickets, using the `gh pr` equivalents:
 
 - **Read a PR**: `gh pr view <number> --comments` and `gh pr diff <number>` for the diff.
-- **List external PRs for triage**: `gh pr list --state open --json number,title,body,labels,author,authorAssociation,comments` then keep only `authorAssociation` of `CONTRIBUTOR`, `FIRST_TIME_CONTRIBUTOR`, or `NONE` (drop `OWNER`/`MEMBER`/`COLLABORATOR`).
-- **Comment / label / close**: `gh pr comment`, `gh pr edit --add-label`/`--remove-label`, `gh pr close`.
+- **List external PRs for triage**: `gh pr list --state open --json number,title,body,labels,author,authorAssociation` then keep only `authorAssociation` of `CONTRIBUTOR`, `FIRST_TIME_CONTRIBUTOR`, or `NONE` (drop `OWNER`/`MEMBER`/`COLLABORATOR`).
+- **Comment / label / close**: `gh pr comment`, `gh pr edit --add-label`, `gh pr close`.
 
 GitHub shares one number space across issues and PRs, so a bare `#42` may be either — resolve with `gh pr view 42` and fall back to `gh issue view 42`.
 
 ## When a skill says "publish to the issue tracker"
 
-Create a GitHub issue.
+Write the local ticket file under `docs/tickets/<feature-slug>/`. Do not call `gh issue create`.
 
 ## When a skill says "fetch the relevant ticket"
 
-Run `gh issue view <number> --comments`.
+Read the ticket file under `docs/tickets/`.
 
 ## Wayfinding operations
 
-Used by `/wayfinder`. The **map** is a single issue with **child** issues as tickets.
+Used by `/wayfinder`. The **map** is a hub ticket file in the feature directory (e.g. `docs/tickets/legacy-electron-audit/00-tracking-hub.md`) holding the Notes / Decisions-so-far / Fog body and an index of its child tickets.
 
-- **Map**: a single issue labelled `wayfinder:map`, holding the Notes / Decisions-so-far / Fog body. `gh issue create --label wayfinder:map`.
-- **Child ticket**: an issue linked to the map as a GitHub sub-issue (`gh api` on the sub-issues endpoint). Where sub-issues aren't enabled, add the child to a task list in the map body and put `Part of #<map>` at the top of the child body. Labels: `wayfinder:<type>` (`research`/`prototype`/`grilling`/`task`). Once claimed, the ticket is assigned to the driving dev.
-- **Blocking**: GitHub's **native issue dependencies** — the canonical, UI-visible representation. Add an edge with `gh api --method POST repos/<owner>/<repo>/issues/<child>/dependencies/blocked_by -F issue_id=<blocker-db-id>`, where `<blocker-db-id>` is the blocker's numeric **database id** (`gh api repos/<owner>/<repo>/issues/<n> --jq .id`, _not_ the `#number` or `node_id`). GitHub reports `issue_dependencies_summary.blocked_by` (open blockers only — the live gate). Where dependencies aren't available, fall back to a `Blocked by: #<n>, #<n>` line at the top of the child body. A ticket is unblocked when every blocker is closed.
-- **Frontier query**: list the map's open children (`gh issue list --state open`, scoped to the map's sub-issues / task list), drop any with an open blocker (`issue_dependencies_summary.blocked_by > 0`, or an open issue in the `Blocked by` line) or an assignee; first in map order wins.
-- **Claim**: `gh issue edit <n> --add-assignee @me` — the session's first write.
-- **Resolve**: `gh issue comment <n> --body "<answer>"`, then `gh issue close <n>`, then append a context pointer (gist + link) to the map's Decisions-so-far.
+- **Map**: a `00-<slug>.md` hub file in the feature directory.
+- **Child ticket**: a numbered ticket file listed in the hub's index. Where a finding cluster has no hub yet, create the directory with the first ticket and add the hub when the map forms.
+- **Blocking**: the `**Blocked by:**` line in each child file. A ticket is unblocked when every listed blocker reads `**Status:** completed`.
+- **Frontier query**: scan the hub's index for child files whose status is not `completed` and whose blockers are all completed; first in hub order wins.
+- **Claim**: set the child's `**Status:** in progress` — the session's first write to that file.
+- **Resolve**: record the answer in the child file, set `**Status:** completed`, then append a context pointer to the hub's Decisions-so-far.
