@@ -4,7 +4,7 @@ Hub for the findings that survived the legacy-audit triage (PR #44), restated
 against the post-rewrite Tauri/Rust/React stack. Source audit record:
 `docs/tickets/legacy-electron-audit/00-tracking-hub.md`.
 
-**Status:** in progress
+**Status:** completed (all five tickets delivered; PR #45–#48, #50)
 
 ## Ticket index
 
