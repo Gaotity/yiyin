@@ -14,7 +14,7 @@ import { pathToFileURL } from 'node:url'
 const expected = {
   identifier: 'io.github.gaotity.yiyin',
   productName: '壹印',
-  version: '1.6.0',
+  version: '2.0.0',
 }
 const forbiddenPayloads = ['electron', 'sharp', 'svelte', 'db-ui']
 const forbiddenSidecars = ['node', 'node.exe', 'ffmpeg', 'exiftool']

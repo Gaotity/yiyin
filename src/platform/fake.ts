@@ -41,7 +41,7 @@ export function defaultBootstrap(
 ): BootstrapDto {
   return {
     config: {
-      version: '1.6.0',
+      version: '2.0.0',
       options: {
         quickOutput: false,
         landscape: false,

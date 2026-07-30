@@ -5259,14 +5259,14 @@ checksum = "e01738255b5a16e78bbb83e7fbba0a1e7dd506905cfc53f4622d89015a03fbb5"
 
 [[package]]
 name = "yiyin-application"
-version = "1.6.0"
+version = "2.0.0"
 dependencies = [
  "yiyin-domain",
 ]
 
 [[package]]
 name = "yiyin-desktop"
-version = "1.6.0"
+version = "2.0.0"
 dependencies = [
  "log",
  "serde",
@@ -5286,7 +5286,7 @@ dependencies = [
 
 [[package]]
 name = "yiyin-domain"
-version = "1.6.0"
+version = "2.0.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -5294,7 +5294,7 @@ dependencies = [
 
 [[package]]
 name = "yiyin-infrastructure"
-version = "1.6.0"
+version = "2.0.0"
 dependencies = [
  "cosmic-text",
  "image",

@@ -33,7 +33,7 @@ fn main_capability_and_production_window_expose_no_generic_native_api() {
             .expect("parse Tauri config");
     assert_eq!(config["identifier"], "io.github.gaotity.yiyin");
     assert_eq!(config["productName"], "壹印");
-    assert_eq!(config["version"], "1.6.0");
+    assert_eq!(config["version"], "2.0.0");
     assert_eq!(config["app"]["withGlobalTauri"], false);
     let window = &config["app"]["windows"][0];
     assert_eq!(window["width"], 900);

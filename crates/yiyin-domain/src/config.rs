@@ -243,7 +243,7 @@ impl Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            version: "1.6.0".to_owned(),
+            version: "2.0.0".to_owned(),
             output: "Pictures/watermark".to_owned(),
             options: RenderOptions::default(),
             temp_fields: default_template_fields(),
@@ -266,10 +266,10 @@ mod tests {
     use crate::DomainError;
 
     #[test]
-    fn defaults_match_v1_6() {
+    fn defaults_match_the_current_version() {
         let config = Config::default();
 
-        assert_eq!(config.version, "1.6.0");
+        assert_eq!(config.version, "2.0.0");
         assert_eq!(config.output, "Pictures/watermark");
         assert!(!config.options.iot);
         assert!(!config.options.landscape);
