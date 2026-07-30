@@ -436,19 +436,12 @@ fn blank_version_and_output_fall_back_to_defaults_with_warnings() {
         outcome
             .warnings()
             .iter()
-            .any(|warning| warning.contains("version")),
-        "a warning names version: {:?}",
-        outcome.warnings()
-    );
-    assert!(
-        outcome
-            .warnings()
-            .iter()
             .any(|warning| warning.contains("output")),
         "a warning names output: {:?}",
         outcome.warnings()
     );
     let config = harness.repository().load().expect("load config");
-    assert_eq!(config.version, "1.6.0");
-    assert_eq!(config.output, "Pictures/watermark");
+    let defaults = yiyin_domain::Config::default();
+    assert_eq!(config.version, defaults.version);
+    assert_eq!(config.output, defaults.output);
 }

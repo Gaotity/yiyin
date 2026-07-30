@@ -108,7 +108,7 @@ describe('dependency and desktop security policy', () => {
     const serialized = JSON.stringify(config)
     expect(config).toMatchObject({
       productName: '壹印',
-      version: '1.6.0',
+      version: '2.0.0',
       identifier: 'io.github.gaotity.yiyin',
       app: { windows: [{ devtools: false }] },
     })

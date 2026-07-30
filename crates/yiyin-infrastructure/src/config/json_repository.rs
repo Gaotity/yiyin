@@ -8,10 +8,10 @@ use std::{
 use serde::{Deserialize, Serialize};
 use yiyin_application::{ApplicationError, ConfigRepository, ImportOutcome};
 use yiyin_domain::{
-    BackgroundBlur, BackgroundRatio, CaseConversion, Config, FieldContentKind, FontFamily,
-    FontSpec, MainImageWidth, MiniTopBottomMargin, Quality, Radius, RenderOptions, ResourceId,
-    Shadow, SolidColor, Template, TemplateField, TemplateKind, TextMargin, VerticalAlign,
-    default_template_fields, default_templates,
+    BackgroundBlur, BackgroundRatio, CURRENT_VERSION, CaseConversion, Config, FieldContentKind,
+    FontFamily, FontSpec, MainImageWidth, MiniTopBottomMargin, Quality, Radius, RenderOptions,
+    ResourceId, Shadow, SolidColor, Template, TemplateField, TemplateKind, TextMargin,
+    VerticalAlign, default_template_fields, default_templates,
 };
 
 use crate::{FileSystem, StdFileSystem};
@@ -248,7 +248,9 @@ pub(crate) fn decode_legacy_config(contents: &[u8]) -> DecodedLegacyConfig {
     }
 
     let defaults = Config::default();
-    let version = salvage_string(&known, "version", &defaults.version, &mut warnings);
+    // The imported configuration now runs on the new app; stamp it with the
+    // current version (the migration marker records the legacy provenance).
+    let version = CURRENT_VERSION.to_owned();
     let output = salvage_string(&known, "output", &defaults.output, &mut warnings);
     let options = salvage_options(known.get("options"), &mut warnings);
     let mut image_references = Vec::new();
@@ -439,11 +441,15 @@ fn decode_config(contents: &[u8]) -> Result<Config, DecodeFailure> {
     if version != u64::from(CURRENT_CONFIG_VERSION) {
         return Err(DecodeFailure::FutureVersion);
     }
-    serde_json::from_value::<StoredConfigEnvelope>(value)
+    let mut config = serde_json::from_value::<StoredConfigEnvelope>(value)
         .map_err(|_| DecodeFailure::Invalid)?
         .config
         .into_domain()
-        .map_err(|_| DecodeFailure::Invalid)
+        .map_err(|_| DecodeFailure::Invalid)?;
+    // The footer displays this as the running app's version, so an upgraded
+    // install always reads the current one.
+    CURRENT_VERSION.clone_into(&mut config.version);
+    Ok(config)
 }
 
 #[derive(Serialize, Deserialize)]

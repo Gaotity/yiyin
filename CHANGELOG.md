@@ -1,19 +1,25 @@
 # Changelog
 
 
-## Unreleased
+## v2.0.0
+
+The first release of the Tauri/Rust rewrite line. Version numbering restarts at 2.0.0 to separate it from the legacy Electron line (upstream `ggchivalrous/yiyin` publishes v1.7.0).
 
 ### 🚀 Enhancements
 
 - Rewrote the desktop runtime from Electron/Svelte to Tauri 2 + Rust + React (see `docs/specs/tauri-rust-rewrite.md`)
+- Image registration no longer fully decodes pixels: dimensions are probed from headers only, and batch registration runs off the async runtime (#45)
+- Legacy config import degrades gracefully: invalid legacy values fall back to defaults with logged warnings instead of aborting startup (#48)
 
 ### 🩹 Fixes
 
 - Follow-up hardening: window-drag capability, drop-error feedback, output-name reservation release, preview resource cleanup, bundle-verification scanning of large binaries, frozen-fixture benchmark wiring
+- Sub-second exposures in the 0.67–1s range display as decimal seconds (`0.7`) instead of the misleading `1/1` (#46)
 
 ### 📚 Documentation
 
 - Reorganized the documentation set with attribution to `ggchivalrous/yiyin` (README, NOTICE, and a docs index) and corrected `package.json` author/repository metadata now that the repository is developed independently
+- Added a renderer import-boundary guardrail: policy tests keep `@tauri-apps/api` and `node:*` imports inside `src/platform/` (#47)
 
 ## v1.6.0
 

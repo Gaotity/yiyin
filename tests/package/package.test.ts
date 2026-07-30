@@ -88,7 +88,7 @@ describe('bundle verification', () => {
     mkdirSync(join(fixture, 'Contents', 'Resources'), { recursive: true })
     writeFileSync(
       join(fixture, 'Contents', 'Info.plist'),
-      plist('壹印', 'io.github.gaotity.yiyin', '1.6.0'),
+      plist('壹印', 'io.github.gaotity.yiyin', '2.0.0'),
     )
     writeFileSync(join(fixture, 'Contents', 'MacOS', '壹印'), 'native-binary')
     writeFileSync(join(fixture, 'Contents', 'Resources', 'icon.icns'), 'icon')
@@ -140,7 +140,7 @@ describe('bundle verification', () => {
     mkdirSync(join(fixture, 'Contents', 'Resources'), { recursive: true })
     writeFileSync(
       join(fixture, 'Contents', 'Info.plist'),
-      plist('壹印', 'io.github.gaotity.yiyin', '1.6.0'),
+      plist('壹印', 'io.github.gaotity.yiyin', '2.0.0'),
     )
     writeFileSync(join(fixture, 'Contents', 'MacOS', '壹印'), 'native-binary')
     writeFileSync(join(fixture, 'Contents', 'Resources', 'icon.icns'), 'icon')
@@ -202,7 +202,7 @@ describe('bundle verification', () => {
     mkdirSync(join(fixture, 'Contents', 'Resources'), { recursive: true })
     writeFileSync(
       join(fixture, 'Contents', 'Info.plist'),
-      plist('壹印', 'io.github.gaotity.yiyin', '1.6.0'),
+      plist('壹印', 'io.github.gaotity.yiyin', '2.0.0'),
     )
     writeFileSync(join(fixture, 'Contents', 'MacOS', '壹印'), 'native-binary')
     writeFileSync(join(fixture, 'Contents', 'Resources', 'icon.icns'), 'icon')
