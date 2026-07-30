@@ -265,3 +265,22 @@ fn every_failed_atomic_write_stage_keeps_the_prior_config_loadable() {
         assert_eq!(harness.reload(), original, "fault: {fault:?}");
     }
 }
+
+#[test]
+fn a_config_written_by_an_older_app_version_is_stamped_on_load() {
+    let harness = Harness::new();
+    let mut older = Config {
+        output: "/kept/output".to_owned(),
+        ..Config::default()
+    };
+    older.version = "1.6.0".to_owned();
+    harness
+        .repository()
+        .store(&older)
+        .expect("store older config");
+
+    let loaded = harness.reload();
+
+    assert_eq!(loaded.version, yiyin_domain::CURRENT_VERSION);
+    assert_eq!(loaded.output, "/kept/output");
+}
