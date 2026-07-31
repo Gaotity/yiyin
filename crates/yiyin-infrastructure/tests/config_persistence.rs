@@ -164,7 +164,7 @@ fn future_schema_is_rejected_without_interpretation() {
 }
 
 #[test]
-fn every_failed_atomic_write_stage_keeps_the_prior_config_loadable() {
+fn every_failed_durable_publish_stage_keeps_the_prior_config_loadable() {
     for fault in [
         FaultPoint::WriteAndSync,
         FaultPoint::Copy,
