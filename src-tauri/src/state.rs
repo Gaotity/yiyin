@@ -162,6 +162,10 @@ impl AppState {
     /// # Errors
     ///
     /// Returns a stable application error when native storage or adapters cannot initialize.
+    #[allow(
+        clippy::too_many_lines,
+        reason = "the composition root wires every use case in one readable flow"
+    )]
     pub fn compose(app: &AppHandle<Wry>) -> Result<Self, yiyin_application::ApplicationError> {
         let app_data = app
             .path()
@@ -225,7 +229,10 @@ impl AppState {
                 Arc::clone(&resource_repository),
                 Arc::clone(&tasks),
             ),
-            update_config: UpdateConfig::new(Arc::clone(&config_repository)),
+            update_config: UpdateConfig::new(
+                Arc::clone(&config_repository),
+                Arc::clone(&resource_repository),
+            ),
             reset_config: ResetConfig::new(Arc::clone(&config_repository)),
             set_output_directory: SetOutputDirectory::new(
                 Arc::clone(&config_repository),

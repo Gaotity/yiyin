@@ -14,6 +14,7 @@ use yiyin_application::{
 use yiyin_domain::{
     BuiltInField, Config, ImageDimensions, Metadata, NumericConstraint, NumericOption,
     OutputDirectory, RenderRequest, RenderStage, ResourceId, ResourceKind, TaskId, TaskStatus,
+    TemplateField,
 };
 
 #[derive(Clone)]
@@ -358,12 +359,122 @@ fn update_config_rejects_invalid_values_before_persisting() {
     let mut invalid = Config::default();
     invalid.version.clear();
 
-    let error = UpdateConfig::new(repository.clone())
+    let error = UpdateConfig::new(repository.clone(), Arc::new(FakeResources::default()))
         .execute(invalid)
         .unwrap_err();
 
     assert_eq!(error.code(), ErrorCode::ConfigInvalid);
     assert_eq!(repository.write_count(), 0);
+}
+
+#[test]
+fn update_config_rejects_custom_fields_pointing_at_font_resources() {
+    let repository = Arc::new(FakeConfig::default());
+    let resources = Arc::new(FakeResources::default());
+    resources.push(ResourceRecord::new(
+        ResourceId::try_from("font-1").expect("resource id"),
+        ResourceKind::Font,
+        "Body",
+        PathBuf::from("body.ttf"),
+    ));
+    let mut config = Config::default();
+    let mut logo = TemplateField::custom("logo", "Logo").expect("custom field");
+    logo.set_image_variants(
+        Some(ResourceId::try_from("font-1").expect("resource id")),
+        None,
+    );
+    config.custom_temp_fields.push(logo);
+
+    let error = UpdateConfig::new(repository.clone(), resources)
+        .execute(config)
+        .unwrap_err();
+
+    assert_eq!(error.code(), ErrorCode::ConfigInvalid);
+    assert_eq!(repository.write_count(), 0);
+}
+
+#[test]
+fn update_config_rejects_builtin_fields_pointing_at_input_resources() {
+    let repository = Arc::new(FakeConfig::default());
+    let resources = Arc::new(FakeResources::default());
+    resources.push(ResourceRecord::new(
+        ResourceId::try_from("input-photo.jpg").expect("resource id"),
+        ResourceKind::Input,
+        "photo.jpg",
+        PathBuf::from("photo.jpg"),
+    ));
+    let mut config = Config::default();
+    config
+        .temp_fields
+        .iter_mut()
+        .find(|field| field.key().as_str() == "Make")
+        .expect("built-in Make field")
+        .set_image_variants(
+            Some(ResourceId::try_from("input-photo.jpg").expect("resource id")),
+            None,
+        );
+
+    let error = UpdateConfig::new(repository.clone(), resources)
+        .execute(config)
+        .unwrap_err();
+
+    assert_eq!(error.code(), ErrorCode::ConfigInvalid);
+    assert_eq!(repository.write_count(), 0);
+}
+
+#[test]
+fn update_config_accepts_images_pointing_at_bundled_assets_and_overlays() {
+    let repository = Arc::new(FakeConfig::default());
+    let resources = Arc::new(FakeResources::default());
+    resources.push(ResourceRecord::new(
+        ResourceId::try_from("bundled-logo").expect("resource id"),
+        ResourceKind::BundledAsset,
+        "nikon-b.png",
+        PathBuf::from("bundled/nikon-b.png"),
+    ));
+    resources.push(ResourceRecord::new(
+        ResourceId::try_from("overlay-frame").expect("resource id"),
+        ResourceKind::Overlay,
+        "frame.png",
+        PathBuf::from("owned/frame.png"),
+    ));
+    let mut config = Config::default();
+    config
+        .temp_fields
+        .iter_mut()
+        .find(|field| field.key().as_str() == "Make")
+        .expect("built-in Make field")
+        .set_image_variants(
+            Some(ResourceId::try_from("bundled-logo").expect("resource id")),
+            None,
+        );
+    let mut frame = TemplateField::custom("frame", "Frame").expect("custom field");
+    frame.set_image_variants(
+        None,
+        Some(ResourceId::try_from("overlay-frame").expect("resource id")),
+    );
+    config.custom_temp_fields.push(frame);
+
+    UpdateConfig::new(repository.clone(), resources)
+        .execute(config)
+        .expect("bundled assets and overlays are valid image references");
+
+    assert_eq!(repository.write_count(), 1);
+}
+
+#[test]
+fn update_config_leaves_text_fields_with_custom_values_untouched() {
+    let repository = Arc::new(FakeConfig::default());
+    let mut config = Config::default();
+    let mut note = TemplateField::custom("note", "Note").expect("custom field");
+    note.set_custom_text("font-1", false);
+    config.custom_temp_fields.push(note);
+
+    UpdateConfig::new(repository.clone(), Arc::new(FakeResources::default()))
+        .execute(config)
+        .expect("text custom values are not resource references");
+
+    assert_eq!(repository.write_count(), 1);
 }
 
 #[test]
