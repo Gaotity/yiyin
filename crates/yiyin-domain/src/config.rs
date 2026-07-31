@@ -155,6 +155,28 @@ impl TryFrom<&str> for FontFamily {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OutputDirectory(String);
+
+impl OutputDirectory {
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl TryFrom<&str> for OutputDirectory {
+    type Error = DomainError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        if value.trim().is_empty() {
+            Err(DomainError::Empty("output"))
+        } else {
+            Ok(Self(value.to_owned()))
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 #[allow(
     clippy::struct_excessive_bools,
@@ -212,7 +234,7 @@ impl Default for RenderOptions {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Config {
     pub version: String,
-    pub output: String,
+    pub output: OutputDirectory,
     pub options: RenderOptions,
     pub temp_fields: Vec<TemplateField>,
     pub custom_temp_fields: Vec<TemplateField>,
@@ -248,7 +270,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             version: CURRENT_VERSION.to_owned(),
-            output: "Pictures/watermark".to_owned(),
+            output: OutputDirectory("Pictures/watermark".to_owned()),
             options: RenderOptions::default(),
             temp_fields: default_template_fields(),
             custom_temp_fields: Vec::new(),
@@ -264,8 +286,8 @@ impl Default for Config {
 )]
 mod tests {
     use super::{
-        BackgroundBlur, BackgroundRatio, Config, MainImageWidth, MiniTopBottomMargin, Quality,
-        Radius, Shadow, TextMargin,
+        BackgroundBlur, BackgroundRatio, Config, MainImageWidth, MiniTopBottomMargin,
+        OutputDirectory, Quality, Radius, Shadow, TextMargin,
     };
     use crate::DomainError;
 
@@ -274,7 +296,7 @@ mod tests {
         let config = Config::default();
 
         assert_eq!(config.version, "2.0.0");
-        assert_eq!(config.output, "Pictures/watermark");
+        assert_eq!(config.output.as_str(), "Pictures/watermark");
         assert!(!config.options.iot);
         assert!(!config.options.landscape);
         assert!(!config.options.solid_background);
@@ -294,6 +316,27 @@ mod tests {
         assert_eq!(config.options.mini_top_bottom_margin.get(), 0.0);
         assert_eq!(config.options.background_blur.get(), 100);
         assert!(!config.options.preview_visible);
+    }
+
+    #[test]
+    fn output_directory_rejects_blank_values() {
+        assert_eq!(
+            OutputDirectory::try_from(""),
+            Err(DomainError::Empty("output"))
+        );
+        assert_eq!(
+            OutputDirectory::try_from("   "),
+            Err(DomainError::Empty("output"))
+        );
+    }
+
+    #[test]
+    fn output_directory_keeps_relative_and_absolute_values() {
+        let relative = OutputDirectory::try_from("Pictures/watermark").expect("relative");
+        assert_eq!(relative.as_str(), "Pictures/watermark");
+
+        let absolute = OutputDirectory::try_from("/photos/framed").expect("absolute");
+        assert_eq!(absolute.as_str(), "/photos/framed");
     }
 
     #[test]

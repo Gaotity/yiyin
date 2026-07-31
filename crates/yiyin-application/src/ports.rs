@@ -4,8 +4,8 @@ use std::{
 };
 
 use yiyin_domain::{
-    Config, ImageDensity, ImageDimensions, Metadata, RenderRequest, RenderStage, ResourceId,
-    ResourceKind, TaskId, TaskStatus,
+    Config, ImageDensity, ImageDimensions, Metadata, OutputDirectory, RenderRequest, RenderStage,
+    ResourceId, ResourceKind, TaskId, TaskStatus,
 };
 
 use crate::{ApplicationError, ImportOutcome, RegisteredTask, RenderResult, TaskSnapshot};
@@ -149,6 +149,12 @@ pub trait OutputDirectoryGateway: Send + Sync {
     fn existing_names(&self) -> Result<BTreeSet<String>, ApplicationError>;
     fn reserve(&self, file_name: &str) -> Result<(), ApplicationError>;
     fn release(&self, file_name: &str) -> Result<(), ApplicationError>;
+    /// Probes the configured root, creating it when missing, without
+    /// switching the live root to it.
+    fn ensure_root(&self, root: &OutputDirectory) -> Result<(), ApplicationError>;
+    /// Switches the live root and drops every reservation: a new root is a
+    /// new naming namespace, so names reserved for the previous root are void.
+    fn change_root(&self, root: &OutputDirectory) -> Result<(), ApplicationError>;
 }
 
 pub trait IdGenerator: Send + Sync {

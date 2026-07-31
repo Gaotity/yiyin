@@ -1,8 +1,8 @@
 use std::{collections::BTreeSet, sync::Arc};
 
-use yiyin_domain::Config;
+use yiyin_domain::{Config, OutputDirectory};
 
-use crate::{ApplicationError, ConfigRepository};
+use crate::{ApplicationError, ConfigRepository, OutputDirectoryGateway};
 
 pub struct UpdateConfig {
     repository: Arc<dyn ConfigRepository>,
@@ -19,7 +19,8 @@ impl UpdateConfig {
     /// # Errors
     ///
     /// Returns `CONFIG_INVALID` without writing when required values or stable
-    /// keys are invalid, otherwise forwards repository errors.
+    /// keys are invalid, otherwise forwards repository errors. The output
+    /// directory needs no check here: its value object is always non-empty.
     pub fn execute(&self, config: Config) -> Result<Config, ApplicationError> {
         validate(&config)?;
         self.repository.store(&config)?;
@@ -49,8 +50,40 @@ impl ResetConfig {
     }
 }
 
+pub struct SetOutputDirectory {
+    repository: Arc<dyn ConfigRepository>,
+    output: Arc<dyn OutputDirectoryGateway>,
+}
+
+impl SetOutputDirectory {
+    #[must_use]
+    pub const fn new(
+        repository: Arc<dyn ConfigRepository>,
+        output: Arc<dyn OutputDirectoryGateway>,
+    ) -> Self {
+        Self { repository, output }
+    }
+
+    /// Moves exports to a new root: probe, persist, then swap.
+    ///
+    /// # Errors
+    ///
+    /// A failed probe changes nothing; a failed persist leaves at most a
+    /// created directory with the previous root still live; the swap can only
+    /// fail on a poisoned lock. This is the only write path for the output
+    /// directory (ADR 0002).
+    pub fn execute(&self, output: OutputDirectory) -> Result<Config, ApplicationError> {
+        let mut config = self.repository.load()?;
+        config.output = output;
+        self.output.ensure_root(&config.output)?;
+        self.repository.store(&config)?;
+        self.output.change_root(&config.output)?;
+        Ok(config)
+    }
+}
+
 fn validate(config: &Config) -> Result<(), ApplicationError> {
-    if config.version.trim().is_empty() || config.output.trim().is_empty() {
+    if config.version.trim().is_empty() {
         return Err(ApplicationError::config_invalid());
     }
 
