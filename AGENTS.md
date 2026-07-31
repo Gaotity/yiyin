@@ -14,7 +14,7 @@ All coding work in this repo follows the [mattpocock/skills](https://github.com/
 
 ### Issue tracker
 
-Tickets live in Linear, in the [`Yiyin`](https://linear.app/wg-studio/project/yiyin-3ba958517518/overview) project (wg-studio workspace, team `C-level`). Local files under `docs/tickets/` are the frozen pre-migration record (see `docs/agents/linear-migration.md`). See `docs/agents/issue-tracker.md`.
+Tickets live in Linear, in the [`Yiyin`](https://linear.app/wg-studio/project/yiyin-3ba958517518/overview) project (wg-studio workspace, team `Engineering` / `ENG`). Local files under `docs/tickets/` are the frozen pre-migration record (see `docs/agents/linear-migration.md`). See `docs/agents/issue-tracker.md` for tracker mechanics and `docs/agents/project-governance.md` for day-to-day conventions (milestones, labels, relations, due dates, estimates, priority).
 
 ### Triage labels
 
