@@ -19,7 +19,8 @@ impl UpdateConfig {
     /// # Errors
     ///
     /// Returns `CONFIG_INVALID` without writing when required values or stable
-    /// keys are invalid, otherwise forwards repository errors.
+    /// keys are invalid, otherwise forwards repository errors. The output
+    /// directory needs no check here: its value object is always non-empty.
     pub fn execute(&self, config: Config) -> Result<Config, ApplicationError> {
         validate(&config)?;
         self.repository.store(&config)?;
@@ -50,7 +51,7 @@ impl ResetConfig {
 }
 
 fn validate(config: &Config) -> Result<(), ApplicationError> {
-    if config.version.trim().is_empty() || config.output.trim().is_empty() {
+    if config.version.trim().is_empty() {
         return Err(ApplicationError::config_invalid());
     }
 

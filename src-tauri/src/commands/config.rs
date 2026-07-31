@@ -37,7 +37,7 @@ pub fn reset_config(
         .reset_config
         .execute()
         .map_err(crate::dto::CommandErrorDto::from)?;
-    crate::commands::native::reset_output_root(&app, &state, &config.output)?;
+    crate::commands::native::reset_output_root(&app, &state, config.output.as_str())?;
     Ok((&config).into())
 }
 

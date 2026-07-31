@@ -6,7 +6,7 @@ use std::{
 
 use tempfile::TempDir;
 use yiyin_application::{ConfigRepository, ErrorCode};
-use yiyin_domain::{CaseConversion, Config, FontSpec, Quality, Template, TemplateField};
+use yiyin_domain::{CaseConversion, Config, FontSpec, OutputDirectory, Quality, Template, TemplateField};
 use yiyin_infrastructure::{DirectoryEntry, FileSystem, JsonConfigRepository, StdFileSystem};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -125,7 +125,7 @@ impl Harness {
 
 fn changed_config() -> Config {
     let mut config = Config {
-        output: "/chosen/output".to_owned(),
+        output: OutputDirectory::try_from("/chosen/output").expect("output directory"),
         ..Config::default()
     };
     config.options.quality = Quality::try_from(82_u8).expect("quality");
@@ -270,7 +270,7 @@ fn every_failed_atomic_write_stage_keeps_the_prior_config_loadable() {
 fn a_config_written_by_an_older_app_version_is_stamped_on_load() {
     let harness = Harness::new();
     let mut older = Config {
-        output: "/kept/output".to_owned(),
+        output: OutputDirectory::try_from("/kept/output").expect("output directory"),
         ..Config::default()
     };
     older.version = "1.6.0".to_owned();
@@ -282,5 +282,5 @@ fn a_config_written_by_an_older_app_version_is_stamped_on_load() {
     let loaded = harness.reload();
 
     assert_eq!(loaded.version, yiyin_domain::CURRENT_VERSION);
-    assert_eq!(loaded.output, "/kept/output");
+    assert_eq!(loaded.output.as_str(), "/kept/output");
 }

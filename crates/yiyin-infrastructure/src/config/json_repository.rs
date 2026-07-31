@@ -9,9 +9,9 @@ use serde::{Deserialize, Serialize};
 use yiyin_application::{ApplicationError, ConfigRepository, ImportOutcome};
 use yiyin_domain::{
     BackgroundBlur, BackgroundRatio, CURRENT_VERSION, CaseConversion, Config, FieldContentKind,
-    FontFamily, FontSpec, MainImageWidth, MiniTopBottomMargin, Quality, Radius, RenderOptions,
-    ResourceId, Shadow, SolidColor, Template, TemplateField, TemplateKind, TextMargin,
-    VerticalAlign, default_template_fields, default_templates,
+    FontFamily, FontSpec, MainImageWidth, MiniTopBottomMargin, OutputDirectory, Quality, Radius,
+    RenderOptions, ResourceId, Shadow, SolidColor, Template, TemplateField, TemplateKind,
+    TextMargin, VerticalAlign, default_template_fields, default_templates,
 };
 
 use crate::{FileSystem, StdFileSystem};
@@ -251,7 +251,7 @@ pub(crate) fn decode_legacy_config(contents: &[u8]) -> DecodedLegacyConfig {
     // The imported configuration now runs on the new app; stamp it with the
     // current version (the migration marker records the legacy provenance).
     let version = CURRENT_VERSION.to_owned();
-    let output = salvage_string(&known, "output", &defaults.output, &mut warnings);
+    let output = salvage_string(&known, "output", defaults.output.as_str(), &mut warnings);
     let options = salvage_options(known.get("options"), &mut warnings);
     let mut image_references = Vec::new();
     let mut temp_fields = salvage_fields(
@@ -271,7 +271,8 @@ pub(crate) fn decode_legacy_config(contents: &[u8]) -> DecodedLegacyConfig {
     DecodedLegacyConfig {
         config: Config {
             version,
-            output,
+            output: OutputDirectory::try_from(output.as_str())
+                .expect("salvage never yields a blank output"),
             options,
             temp_fields,
             custom_temp_fields,
@@ -483,7 +484,7 @@ impl StoredConfigV1 {
     fn from_domain(config: &Config) -> Self {
         Self {
             version: config.version.clone(),
-            output: config.output.clone(),
+            output: config.output.as_str().to_owned(),
             options: StoredOptions::from_domain(&config.options),
             temp_fields: config
                 .temp_fields
@@ -525,7 +526,7 @@ impl StoredConfigV1 {
 
         Ok(Config {
             version: self.version,
-            output: self.output,
+            output: OutputDirectory::try_from(self.output.as_str()).map_err(invalid_domain)?,
             options: self.options.into_domain()?,
             temp_fields,
             custom_temp_fields,

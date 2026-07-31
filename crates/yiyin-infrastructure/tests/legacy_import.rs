@@ -199,7 +199,7 @@ fn preferred_legacy_state_copies_once_without_mutating_its_source() {
 
     assert!(outcome.warnings().is_empty());
     let config = harness.repository().load().expect("load config");
-    assert_eq!(config.output, "/preferred/output");
+    assert_eq!(config.output.as_str(), "/preferred/output");
     let make = config
         .temp_fields
         .iter()
@@ -258,7 +258,7 @@ fn interrupted_resource_publication_retries_without_committing_partial_config() 
         .expect("retry import");
 
     assert_eq!(
-        harness.repository().load().expect("load imported").output,
+        harness.repository().load().expect("load imported").output.as_str(),
         "/legacy/output"
     );
     assert!(harness.resources.join("font/body.ttf").exists());
@@ -310,7 +310,7 @@ fn one_invalid_option_falls_back_to_its_default_without_losing_valid_settings() 
         outcome.warnings()
     );
     let config = harness.repository().load().expect("load config");
-    assert_eq!(config.output, "/legacy/output");
+    assert_eq!(config.output.as_str(), "/legacy/output");
     assert!(config.options.iot);
     assert_eq!(config.options.quality.get(), 100);
     assert_eq!(

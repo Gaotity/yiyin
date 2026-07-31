@@ -230,7 +230,7 @@ fn bootstrap_imports_before_returning_safe_snapshots() {
 fn update_config_rejects_invalid_values_before_persisting() {
     let repository = Arc::new(FakeConfig::default());
     let mut invalid = Config::default();
-    invalid.output.clear();
+    invalid.version.clear();
 
     let error = UpdateConfig::new(repository.clone())
         .execute(invalid)

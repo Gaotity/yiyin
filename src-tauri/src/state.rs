@@ -196,7 +196,7 @@ impl AppState {
             log::warn!("legacy import: {warning}");
         }
         let config = config_repository.load()?;
-        let output_root = resolve_output_root(app, &config.output)?;
+        let output_root = resolve_output_root(app, config.output.as_str())?;
         let output = Arc::new(NativeOutputDirectory::new(output_root)?);
         let resources = compose_resources(&resource_root)?;
 

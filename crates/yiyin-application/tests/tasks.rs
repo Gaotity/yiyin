@@ -10,8 +10,8 @@ use yiyin_application::{
     ResourceRepository, ResourceSnapshot, StartTasks, TaskQueue, TaskSnapshot,
 };
 use yiyin_domain::{
-    BuiltInField, Config, ImageDimensions, Metadata, OutputNameResolver, Quality, RenderRequest,
-    ResourceId, ResourceKind, TaskId, TaskState,
+    BuiltInField, Config, ImageDimensions, Metadata, OutputDirectory, OutputNameResolver, Quality,
+    RenderRequest, ResourceId, ResourceKind, TaskId, TaskState,
 };
 
 #[derive(Clone)]
@@ -34,7 +34,8 @@ impl FakeConfig {
     }
 
     fn set_output(&self, output: &str) {
-        output.clone_into(&mut self.0.lock().expect("config lock").output);
+        self.0.lock().expect("config lock").output =
+            OutputDirectory::try_from(output).expect("valid output directory");
     }
 }
 
@@ -445,7 +446,7 @@ fn configuration_is_frozen_when_task_starts() {
 
     let request = harness.queue.request(&id).expect("queued request");
     assert_eq!(request.options().quality.get(), 80);
-    assert_eq!(request.config().output, "/before");
+    assert_eq!(request.config().output.as_str(), "/before");
     assert_eq!(
         request.metadata().value(BuiltInField::Model),
         Some("before")

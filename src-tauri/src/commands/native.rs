@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Manager, State, Wry};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
+use yiyin_domain::OutputDirectory;
 
 use crate::{
     dto::{ExternalDestinationRequestDto, PublicConfigDto},
@@ -35,7 +36,8 @@ pub async fn choose_output_directory(
         .map_err(|_| yiyin_application::ApplicationError::file_invalid())?;
     state.output.set_root(selected.clone())?;
     let mut config = state.config.load()?;
-    config.output = output_string(&selected)?;
+    config.output = OutputDirectory::try_from(output_string(&selected)?.as_str())
+        .map_err(|_| yiyin_application::ApplicationError::config_invalid())?;
     state
         .update_config
         .execute(config)
