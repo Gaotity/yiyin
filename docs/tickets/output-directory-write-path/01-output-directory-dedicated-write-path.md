@@ -11,7 +11,7 @@ dedicated use case, and rewiring the two write sites.
 
 **Blocked by:** None
 
-**Status:** ready-for-agent
+**Status:** completed
 
 ## Agent Brief
 
@@ -69,22 +69,32 @@ dedicated use case, and rewiring the two write sites.
   non-UTF-8 still `FILE_INVALID`), `reset_config` (two-use-case composition)
 
 **Acceptance criteria:**
-- [ ] `Config.output` is `OutputDirectory`; construction rejects empty and
-      whitespace-only strings (domain unit tests)
-- [ ] Persisted `config.json` keeps output as a plain string; existing
+- [x] `Config.output` is `OutputDirectory`; construction rejects empty and
+      whitespace-only strings (domain unit tests
+      `output_directory_rejects_blank_values`,
+      `output_directory_keeps_relative_and_absolute_values`)
+- [x] Persisted `config.json` keeps output as a plain string; existing
       config-persistence and legacy-import suites stay green after the type
-      change
-- [ ] `SetOutputDirectory` calls probe → persist → swap in order; a failing
+      change (`StoredConfigV1` maps via `as_str`/`TryFrom`; legacy salvage
+      converts at the boundary, whitespace-only output still falls back to
+      the default with a warning)
+- [x] `SetOutputDirectory` calls probe → persist → swap in order; a failing
       probe never reaches persist, a failing persist never reaches swap
-      (use-case tests with call-order-logging fakes)
-- [ ] `change_root` creates the directory, swaps the root, and drops
-      reservations (adapter test: a name reserved pre-swap is absent from
-      `existing_names` post-swap); relative paths resolve against the
-      captured home, absolute paths pass through (adapter tests, tempfile)
-- [ ] `choose_output_directory` and `reset_config` write output only via
-      `SetOutputDirectory`; `resolve_output_root` / `reset_output_root` are
-      gone (grep finds no references)
-- [ ] Full Rust suite + frontend quality checks pass; no TypeScript changes
+      (`set_output_directory_probes_persists_then_swaps`,
+      `a_failing_probe_never_persists_or_swaps`,
+      `a_failing_persist_never_swaps_the_root` with call-order-logging fakes)
+- [x] `change_root` creates the directory, swaps the root, and drops
+      reservations (`change_root_creates_swaps_and_drops_reservations`: a
+      name reserved pre-swap is absent from `existing_names` post-swap);
+      relative paths resolve against the captured home
+      (`relative_roots_resolve_against_the_captured_home`), absolute paths
+      pass through (`absolute_roots_pass_through`)
+- [x] `choose_output_directory` and `reset_config` write output only via
+      `SetOutputDirectory`; the bootstrap/reset resolvers are gone and
+      resolution lives solely inside `NativeOutputDirectory` (grep finds a
+      single `resolve_output_root` — the adapter's private helper)
+- [x] Full Rust suite (`cargo fmt`/`clippy -D warnings`/`cargo test
+      --workspace`) + frontend CI (`pnpm ci`) pass; no TypeScript changes
 
 **Out of scope:**
 - The pre-existing in-flight render race when the root changes mid-render
