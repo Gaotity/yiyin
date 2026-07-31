@@ -1,8 +1,13 @@
+#[path = "support/faulty_filesystem.rs"]
+mod faulty_filesystem;
+
 use std::{
     fs,
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
+use faulty_filesystem::{FaultPoint, FaultyFileSystem};
 use yiyin_application::{ErrorCode, IdGenerator, ResourceRepository};
 use yiyin_domain::{ResourceId, ResourceKind};
 use yiyin_infrastructure::ResourceRegistry;
@@ -328,6 +333,34 @@ fn removing_generated_resources_deletes_only_preview_cache_files() {
 
     assert!(!preview.exists());
     assert!(output.exists());
+}
+
+#[test]
+fn a_failed_owned_publish_never_leaves_the_destination_behind() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let inputs = temp.path().join("inputs");
+    fs::create_dir_all(&inputs).expect("input root");
+    let font = inputs.join("font.ttf");
+    fs::copy(fixtures().join("千图小兔体.ttf"), &font).expect("font fixture");
+    let filesystem = FaultyFileSystem::default();
+    let registry =
+        ResourceRegistry::with_filesystem(&temp.path().join("owned"), Arc::new(filesystem.clone()))
+            .expect("resource registry");
+    filesystem.fail_once(FaultPoint::SyncParent);
+
+    let error = registry
+        .register_owned(ResourceKind::Font, &font, "Body")
+        .expect_err("the publish must surface the sync_parent failure");
+
+    assert_eq!(error.code(), ErrorCode::Internal);
+    let fonts = registry.owned_root().join("fonts");
+    assert!(
+        fs::read_dir(&fonts)
+            .expect("fonts directory")
+            .next()
+            .is_none(),
+        "neither the destination nor its temporary may survive a failed publish"
+    );
 }
 
 #[test]

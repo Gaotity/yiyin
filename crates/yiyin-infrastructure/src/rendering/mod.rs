@@ -3,7 +3,6 @@ mod composite;
 mod text;
 
 use std::{
-    ffi::OsString,
     path::{Path, PathBuf},
     sync::{Arc, RwLock},
 };
@@ -298,24 +297,13 @@ impl RustImageRenderer {
                 "The output file already exists.",
             ));
         }
-        let temporary = with_suffix(&destination, ".tmp");
-        remove_if_present(self.filesystem.as_ref(), &temporary)?;
-        if let Err(error) = self.filesystem.write_and_sync(&temporary, &encoded) {
-            let _ = remove_if_present(self.filesystem.as_ref(), &temporary);
-            return Err(internal_io(error));
-        }
-        if let Err(error) = ensure_active(cancellation) {
-            let _ = remove_if_present(self.filesystem.as_ref(), &temporary);
-            return Err(error);
-        }
-        if let Err(error) = self.filesystem.rename(&temporary, &destination) {
-            let _ = remove_if_present(self.filesystem.as_ref(), &temporary);
-            return Err(internal_io(error));
-        }
-        if let Err(error) = self.filesystem.sync_parent(&destination) {
-            let _ = remove_if_present(self.filesystem.as_ref(), &destination);
-            return Err(internal_io(error));
-        }
+        crate::durable::durable_publish(
+            self.filesystem.as_ref(),
+            &destination,
+            &encoded,
+            None,
+            Some(cancellation),
+        )?;
         if request.is_preview()
             && let Err(error) = ensure_active(cancellation)
         {
@@ -331,7 +319,8 @@ impl RustImageRenderer {
             {
                 Ok(record) => record,
                 Err(error) => {
-                    let _ = remove_if_present(self.filesystem.as_ref(), &destination);
+                    let _ =
+                        crate::durable::remove_if_present(self.filesystem.as_ref(), &destination);
                     return Err(error);
                 }
             };
@@ -485,21 +474,6 @@ fn ensure_active(cancellation: &dyn CancellationProbe) -> Result<(), Application
     } else {
         Ok(())
     }
-}
-
-fn with_suffix(path: &Path, suffix: &str) -> PathBuf {
-    let mut name = path
-        .file_name()
-        .map_or_else(OsString::new, std::ffi::OsStr::to_os_string);
-    name.push(suffix);
-    path.with_file_name(name)
-}
-
-fn remove_if_present(filesystem: &dyn FileSystem, path: &Path) -> Result<(), ApplicationError> {
-    if filesystem.exists(path) {
-        filesystem.remove_file(path).map_err(internal_io)?;
-    }
-    Ok(())
 }
 
 #[allow(
