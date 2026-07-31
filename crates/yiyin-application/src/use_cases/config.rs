@@ -1,8 +1,8 @@
 use std::{collections::BTreeSet, sync::Arc};
 
-use yiyin_domain::Config;
+use yiyin_domain::{Config, OutputDirectory};
 
-use crate::{ApplicationError, ConfigRepository};
+use crate::{ApplicationError, ConfigRepository, OutputDirectoryGateway};
 
 pub struct UpdateConfig {
     repository: Arc<dyn ConfigRepository>,
@@ -46,6 +46,38 @@ impl ResetConfig {
     pub fn execute(&self) -> Result<Config, ApplicationError> {
         let config = Config::default();
         self.repository.store(&config)?;
+        Ok(config)
+    }
+}
+
+pub struct SetOutputDirectory {
+    repository: Arc<dyn ConfigRepository>,
+    output: Arc<dyn OutputDirectoryGateway>,
+}
+
+impl SetOutputDirectory {
+    #[must_use]
+    pub const fn new(
+        repository: Arc<dyn ConfigRepository>,
+        output: Arc<dyn OutputDirectoryGateway>,
+    ) -> Self {
+        Self { repository, output }
+    }
+
+    /// Moves exports to a new root: probe, persist, then swap.
+    ///
+    /// # Errors
+    ///
+    /// A failed probe changes nothing; a failed persist leaves at most a
+    /// created directory with the previous root still live; the swap can only
+    /// fail on a poisoned lock. This is the only write path for the output
+    /// directory (ADR 0002).
+    pub fn execute(&self, output: OutputDirectory) -> Result<Config, ApplicationError> {
+        let mut config = self.repository.load()?;
+        config.output = output;
+        self.output.ensure_root(&config.output)?;
+        self.repository.store(&config)?;
+        self.output.change_root(&config.output)?;
         Ok(config)
     }
 }

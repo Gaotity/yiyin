@@ -258,7 +258,12 @@ fn interrupted_resource_publication_retries_without_committing_partial_config() 
         .expect("retry import");
 
     assert_eq!(
-        harness.repository().load().expect("load imported").output.as_str(),
+        harness
+            .repository()
+            .load()
+            .expect("load imported")
+            .output
+            .as_str(),
         "/legacy/output"
     );
     assert!(harness.resources.join("font/body.ttf").exists());

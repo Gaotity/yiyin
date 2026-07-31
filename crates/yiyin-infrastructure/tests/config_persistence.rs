@@ -6,7 +6,9 @@ use std::{
 
 use tempfile::TempDir;
 use yiyin_application::{ConfigRepository, ErrorCode};
-use yiyin_domain::{CaseConversion, Config, FontSpec, OutputDirectory, Quality, Template, TemplateField};
+use yiyin_domain::{
+    CaseConversion, Config, FontSpec, OutputDirectory, Quality, Template, TemplateField,
+};
 use yiyin_infrastructure::{DirectoryEntry, FileSystem, JsonConfigRepository, StdFileSystem};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -167,6 +167,14 @@ impl OutputDirectoryGateway for FakeOutput {
             .push(file_name.to_owned());
         Ok(())
     }
+
+    fn ensure_root(&self, _root: &OutputDirectory) -> Result<(), ApplicationError> {
+        Ok(())
+    }
+
+    fn change_root(&self, _root: &OutputDirectory) -> Result<(), ApplicationError> {
+        Ok(())
+    }
 }
 
 #[derive(Default)]

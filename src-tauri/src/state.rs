@@ -12,8 +12,8 @@ use std::{
 use tauri::{AppHandle, Manager, Wry};
 use yiyin_application::{
     Bootstrap, CancelTask, ClearTasks, ConfigRepository, PreviewTask, ReadTaskExif, RegisterFont,
-    RegisterImages, RegisterOverlay, RemoveFont, ResetConfig, ResourceRepository, StartTasks,
-    TaskQueue, UpdateConfig,
+    RegisterImages, RegisterOverlay, RemoveFont, ResetConfig, ResourceRepository,
+    SetOutputDirectory, StartTasks, TaskQueue, UpdateConfig,
 };
 use yiyin_infrastructure::{
     ExifMetadataReader, JsonConfigRepository, LegacyImportOptions, ResourceRegistry,
@@ -140,6 +140,7 @@ pub struct AppState {
     pub bootstrap: Bootstrap,
     pub update_config: UpdateConfig,
     pub reset_config: ResetConfig,
+    pub set_output_directory: SetOutputDirectory,
     pub register_images: RegisterImages,
     pub register_font: RegisterFont,
     pub remove_font: RemoveFont,
@@ -196,8 +197,11 @@ impl AppState {
             log::warn!("legacy import: {warning}");
         }
         let config = config_repository.load()?;
-        let output_root = resolve_output_root(app, config.output.as_str())?;
-        let output = Arc::new(NativeOutputDirectory::new(output_root)?);
+        let home = app
+            .path()
+            .home_dir()
+            .map_err(|error| yiyin_application::ApplicationError::internal(error.to_string()))?;
+        let output = Arc::new(NativeOutputDirectory::new(home, &config.output)?);
         let resources = compose_resources(&resource_root)?;
 
         let bundled_fonts = write_bundled_fonts(&app_data.join("bundled-fonts"))?;
@@ -223,6 +227,10 @@ impl AppState {
             ),
             update_config: UpdateConfig::new(Arc::clone(&config_repository)),
             reset_config: ResetConfig::new(Arc::clone(&config_repository)),
+            set_output_directory: SetOutputDirectory::new(
+                Arc::clone(&config_repository),
+                output.clone(),
+            ),
             register_images: RegisterImages::new(
                 Arc::clone(&resource_repository),
                 ids,
@@ -258,21 +266,6 @@ impl AppState {
             output,
         })
     }
-}
-
-fn resolve_output_root(
-    app: &AppHandle<Wry>,
-    configured: &str,
-) -> Result<PathBuf, yiyin_application::ApplicationError> {
-    let configured = PathBuf::from(configured);
-    if configured.is_absolute() {
-        return Ok(configured);
-    }
-    let home = app
-        .path()
-        .home_dir()
-        .map_err(|error| yiyin_application::ApplicationError::internal(error.to_string()))?;
-    Ok(home.join(configured))
 }
 
 fn compose_resources(

@@ -4,7 +4,7 @@
     reason = "Tauri commands use framework-owned extractors and map application errors"
 )]
 
-use tauri::{AppHandle, State, Wry};
+use tauri::State;
 use yiyin_domain::{Config, FieldContentKind, ResourceKind};
 
 use crate::{
@@ -29,15 +29,15 @@ pub fn update_config(
 }
 
 #[tauri::command]
-pub fn reset_config(
-    app: AppHandle<Wry>,
-    state: State<'_, AppState>,
-) -> CommandResult<PublicConfigDto> {
+pub fn reset_config(state: State<'_, AppState>) -> CommandResult<PublicConfigDto> {
     let config = state
         .reset_config
         .execute()
         .map_err(crate::dto::CommandErrorDto::from)?;
-    crate::commands::native::reset_output_root(&app, &state, config.output.as_str())?;
+    let config = state
+        .set_output_directory
+        .execute(config.output.clone())
+        .map_err(crate::dto::CommandErrorDto::from)?;
     Ok((&config).into())
 }
 

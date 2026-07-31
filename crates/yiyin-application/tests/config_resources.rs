@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeSet,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
 };
@@ -7,18 +8,20 @@ use yiyin_application::{
     ApplicationError, Bootstrap, CancellationProbe, ConfigRepository, ErrorCode, IdGenerator,
     ImageRenderer, ImportOutcome, MetadataReader, OutputDirectoryGateway, ReadTaskExif,
     RegisterFont, RegisterImages, RegisterOverlay, RegisteredTask, RemoveFont, RenderResult,
-    ResetConfig, ResourceRecord, ResourceRepository, TaskEventSink, TaskQueue, TaskSnapshot,
-    UpdateConfig,
+    ResetConfig, ResourceRecord, ResourceRepository, SetOutputDirectory, TaskEventSink, TaskQueue,
+    TaskSnapshot, UpdateConfig,
 };
 use yiyin_domain::{
-    BuiltInField, Config, ImageDimensions, Metadata, RenderRequest, RenderStage, ResourceId,
-    ResourceKind, TaskId, TaskStatus,
+    BuiltInField, Config, ImageDimensions, Metadata, OutputDirectory, RenderRequest, RenderStage,
+    ResourceId, ResourceKind, TaskId, TaskStatus,
 };
 
 #[derive(Clone)]
 struct FakeConfig {
     value: Arc<Mutex<Config>>,
     writes: Arc<Mutex<usize>>,
+    log: Option<CallLog>,
+    fail_store: bool,
 }
 
 impl Default for FakeConfig {
@@ -26,13 +29,34 @@ impl Default for FakeConfig {
         Self {
             value: Arc::new(Mutex::new(Config::default())),
             writes: Arc::new(Mutex::new(0)),
+            log: None,
+            fail_store: false,
         }
     }
 }
 
 impl FakeConfig {
+    fn with_log(mut self, log: CallLog) -> Self {
+        self.log = Some(log);
+        self
+    }
+
+    fn failing_store(mut self) -> Self {
+        self.fail_store = true;
+        self
+    }
+
     fn write_count(&self) -> usize {
         *self.writes.lock().expect("writes lock")
+    }
+
+    fn stored_output(&self) -> String {
+        self.value
+            .lock()
+            .expect("config lock")
+            .output
+            .as_str()
+            .to_owned()
     }
 }
 
@@ -42,6 +66,12 @@ impl ConfigRepository for FakeConfig {
     }
 
     fn store(&self, config: &Config) -> Result<(), ApplicationError> {
+        if let Some(log) = &self.log {
+            log.record("store");
+        }
+        if self.fail_store {
+            return Err(ApplicationError::internal("store failed"));
+        }
         *self.value.lock().expect("config lock") = config.clone();
         *self.writes.lock().expect("writes lock") += 1;
         Ok(())
@@ -51,6 +81,77 @@ impl ConfigRepository for FakeConfig {
         Ok(ImportOutcome::with_warnings(vec![
             "legacy warning".to_owned(),
         ]))
+    }
+}
+
+#[derive(Clone, Default)]
+struct CallLog(Arc<Mutex<Vec<&'static str>>>);
+
+impl CallLog {
+    fn record(&self, entry: &'static str) {
+        self.0.lock().expect("log lock").push(entry);
+    }
+
+    fn entries(&self) -> Vec<&'static str> {
+        self.0.lock().expect("log lock").clone()
+    }
+}
+
+#[derive(Clone, Default)]
+struct FakeOutput {
+    log: Option<CallLog>,
+    fail_ensure: bool,
+    changes: Arc<Mutex<Vec<String>>>,
+}
+
+impl FakeOutput {
+    fn with_log(mut self, log: CallLog) -> Self {
+        self.log = Some(log);
+        self
+    }
+
+    fn failing_ensure(mut self) -> Self {
+        self.fail_ensure = true;
+        self
+    }
+
+    fn changes(&self) -> Vec<String> {
+        self.changes.lock().expect("changes lock").clone()
+    }
+}
+
+impl OutputDirectoryGateway for FakeOutput {
+    fn existing_names(&self) -> Result<BTreeSet<String>, ApplicationError> {
+        Ok(BTreeSet::new())
+    }
+
+    fn reserve(&self, _file_name: &str) -> Result<(), ApplicationError> {
+        Ok(())
+    }
+
+    fn release(&self, _file_name: &str) -> Result<(), ApplicationError> {
+        Ok(())
+    }
+
+    fn ensure_root(&self, _root: &OutputDirectory) -> Result<(), ApplicationError> {
+        if let Some(log) = &self.log {
+            log.record("ensure");
+        }
+        if self.fail_ensure {
+            return Err(ApplicationError::internal("ensure failed"));
+        }
+        Ok(())
+    }
+
+    fn change_root(&self, root: &OutputDirectory) -> Result<(), ApplicationError> {
+        if let Some(log) = &self.log {
+            log.record("change");
+        }
+        self.changes
+            .lock()
+            .expect("changes lock")
+            .push(root.as_str().to_owned());
+        Ok(())
     }
 }
 
@@ -249,6 +350,53 @@ fn reset_config_persists_the_complete_default_model() {
 
     assert_eq!(config, Config::default());
     assert_eq!(repository.write_count(), 1);
+}
+
+#[test]
+fn set_output_directory_probes_persists_then_swaps() {
+    let log = CallLog::default();
+    let repository = Arc::new(FakeConfig::default().with_log(log.clone()));
+    let output = Arc::new(FakeOutput::default().with_log(log.clone()));
+
+    let config = SetOutputDirectory::new(repository.clone(), output.clone())
+        .execute(OutputDirectory::try_from("/chosen/output").expect("output directory"))
+        .expect("set output directory");
+
+    assert_eq!(log.entries(), ["ensure", "store", "change"]);
+    assert_eq!(config.output.as_str(), "/chosen/output");
+    assert_eq!(repository.stored_output(), "/chosen/output");
+    assert_eq!(output.changes(), ["/chosen/output"]);
+}
+
+#[test]
+fn a_failing_probe_never_persists_or_swaps() {
+    let log = CallLog::default();
+    let repository = Arc::new(FakeConfig::default().with_log(log.clone()));
+    let output = Arc::new(FakeOutput::default().with_log(log.clone()).failing_ensure());
+
+    let error = SetOutputDirectory::new(repository.clone(), output.clone())
+        .execute(OutputDirectory::try_from("/chosen/output").expect("output directory"))
+        .unwrap_err();
+
+    assert_eq!(error.code(), ErrorCode::Internal);
+    assert_eq!(log.entries(), ["ensure"]);
+    assert_eq!(repository.write_count(), 0);
+    assert!(output.changes().is_empty());
+}
+
+#[test]
+fn a_failing_persist_never_swaps_the_root() {
+    let log = CallLog::default();
+    let repository = Arc::new(FakeConfig::default().with_log(log.clone()).failing_store());
+    let output = Arc::new(FakeOutput::default().with_log(log.clone()));
+
+    let error = SetOutputDirectory::new(repository, output.clone())
+        .execute(OutputDirectory::try_from("/chosen/output").expect("output directory"))
+        .unwrap_err();
+
+    assert_eq!(error.code(), ErrorCode::Internal);
+    assert_eq!(log.entries(), ["ensure", "store"]);
+    assert!(output.changes().is_empty());
 }
 
 #[test]

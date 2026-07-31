@@ -4,9 +4,9 @@
     reason = "Tauri commands use framework-owned extractors and map application errors"
 )]
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
-use tauri::{AppHandle, Manager, State, Wry};
+use tauri::{AppHandle, State, Wry};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
 use yiyin_domain::OutputDirectory;
@@ -34,13 +34,11 @@ pub async fn choose_output_directory(
     let selected = selected
         .into_path()
         .map_err(|_| yiyin_application::ApplicationError::file_invalid())?;
-    state.output.set_root(selected.clone())?;
-    let mut config = state.config.load()?;
-    config.output = OutputDirectory::try_from(output_string(&selected)?.as_str())
+    let output = OutputDirectory::try_from(output_string(&selected)?.as_str())
         .map_err(|_| yiyin_application::ApplicationError::config_invalid())?;
     state
-        .update_config
-        .execute(config)
+        .set_output_directory
+        .execute(output)
         .map(|config| (&config).into())
         .map_err(Into::into)
 }
@@ -64,23 +62,6 @@ pub fn open_external_url(
         .open_url(external_url(request.destination), None::<&str>)
         .map_err(|error| yiyin_application::ApplicationError::internal(error.to_string()))?;
     Ok(())
-}
-
-pub(crate) fn reset_output_root(
-    app: &AppHandle<Wry>,
-    state: &AppState,
-    configured: &str,
-) -> CommandResult<()> {
-    let configured = PathBuf::from(configured);
-    let root = if configured.is_absolute() {
-        configured
-    } else {
-        app.path()
-            .home_dir()
-            .map_err(|error| yiyin_application::ApplicationError::internal(error.to_string()))?
-            .join(configured)
-    };
-    state.output.set_root(root).map_err(Into::into)
 }
 
 fn output_string(value: &Path) -> CommandResult<String> {
