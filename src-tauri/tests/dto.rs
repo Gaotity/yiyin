@@ -66,9 +66,7 @@ fn bootstrap_dto_serializes_numeric_constraints_with_camel_case_keys() {
     );
     let dto = dto_under_test::BootstrapDto::from(&snapshot);
     let serialized = serde_json::to_value(&dto).expect("serialize bootstrap dto");
-    let constraints = serialized
-        .get("constraints")
-        .expect("constraints field");
+    let constraints = serialized.get("constraints").expect("constraints field");
 
     assert_eq!(constraints.as_object().expect("object").len(), 7);
     assert_eq!(

@@ -65,6 +65,7 @@ export function App({ client = tauriClient }: AppProps) {
         <div className="settings-task-layout">
           <RenderingSettings
             config={controller.snapshot.config}
+            constraints={controller.snapshot.constraints}
             onSave={controller.updateConfig}
           />
           <TaskWorkspace
