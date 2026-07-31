@@ -24,6 +24,10 @@ _Avoid_: formatted EXIF, display string
 The filesystem location exports are written to (default `Pictures/watermark`). A domain value object — never a bare string. The UI can choose it only through the native dialog; it never travels through the general config-update path or any DTO.
 _Avoid_: output path, save folder, `output` string
 
+**Numeric constraints**:
+The minimum/maximum/decimals policy for the numeric render options, owned by the domain's bounded value objects and shipped to the frontend through the bootstrap payload. The frontend consumes them for clamping — a UX responsibility — and never maintains its own bounds table.
+_Avoid_: hand-copied bounds, clamp constants, settings table bounds
+
 ### Templates
 
 **Template**:
