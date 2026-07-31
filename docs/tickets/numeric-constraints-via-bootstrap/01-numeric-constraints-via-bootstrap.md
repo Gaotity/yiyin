@@ -14,7 +14,7 @@ real default is 100 — proof the two sources diverged).
 
 **Blocked by:** None
 
-**Status:** ready-for-agent
+**Status:** completed
 
 ## Agent Brief
 
@@ -65,26 +65,32 @@ real default is 100 — proof the two sources diverged).
   `key`/`label`/`help`
 
 **Acceptance criteria:**
-- [ ] Each macro-generated `CONSTRAINT` equals the VO's `TryFrom` bounds for
-      all 7 value objects (domain unit tests pin the exact values, e.g.
-      `MainImageWidth` → `{1, 100, 0}`, `Radius` → `{0, 50, 1}`,
-      `TextMargin` → `{0, 10000, 2}`)
-- [ ] `NumericOption::ALL` holds exactly the 7 variants and `constraint()`
-      returns the corresponding VO constant (name mapping only, no value
-      copies)
-- [ ] The bootstrap snapshot and `BootstrapDto` carry all 7 constraints with
-      camelCase keys (application bootstrap test + dto serialization test)
-- [ ] `RenderingSettings` clamps solely from the prop: a test renders with
-      constraint values that deliberately differ from the domain truth and
-      asserts clamping follows the prop; the blur slider's `min`/`max`/`step`
-      derive from the same prop
-- [ ] `NUMBER_SETTINGS` no longer contains `minimum`/`maximum`/`decimals` and
-      no bounds literals survive in the component's clamp sites (grep)
-- [ ] The blur help copy reads "默认值: 100"
-- [ ] `defaultBootstrap()` in `fake.ts` ships the 7 constraints as a fixture
+- [x] Each macro-generated `CONSTRAINT` equals the VO's `TryFrom` bounds for
+      all 7 value objects (domain unit test
+      `numeric_constraints_match_the_validation_bounds`; the macros now take
+      `decimals` and derive the precision scale, so the shipped values and the
+      validation bounds share one argument list)
+- [x] `NumericOption::ALL` holds exactly the 7 variants and `constraint()`
+      returns the corresponding VO constant
+      (`numeric_option_registers_exactly_the_seven_constrained_options`)
+- [x] The bootstrap snapshot and `BootstrapDto` carry all 7 constraints with
+      camelCase keys (`bootstrap_ships_all_seven_numeric_constraints_from_the_domain`;
+      `bootstrap_dto_serializes_numeric_constraints_with_camel_case_keys`;
+      ts-rs regenerates `NumericConstraintDto` + the `NumericOptionDto` union)
+- [x] `RenderingSettings` clamps solely from the prop
+      (`clamps with the bootstrap constraints prop, never a local table`
+      renders quality `{5, 42, 0}` — not the domain truth — and asserts 42/5;
+      the blur slider's `min`/`max`/`step` derive from the same prop)
+- [x] `NUMBER_SETTINGS` no longer contains `minimum`/`maximum`/`decimals` and
+      no bounds literals survive in the component's clamp sites (grep: only
+      the documented `UNBOUNDED` fallback and the untouched ratio UX clamp
+      remain)
+- [x] The blur help copy reads "默认值: 100" (parity fixture updated to
+      match)
+- [x] `defaultBootstrap()` in `fake.ts` ships the 7 constraints as a fixture
       with a comment pointing at the pinning Rust test
-- [ ] Full Rust suite (`fmt`/`clippy -D warnings`/`cargo test --workspace`)
-      and `pnpm ci` stay green
+- [x] Full Rust suite (`cargo fmt`/`clippy -D warnings`/`cargo test
+      --workspace`) and `pnpm ci` green
 
 **Out of scope:**
 - Ratio constraints (UX-only clamp; `BackgroundRatio` is not a bounded VO)
