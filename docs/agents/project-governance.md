@@ -23,11 +23,16 @@ in `Architecture deepening`, ADR-landing tickets in `ADR landings`.
 ## Labels
 
 All labels are scoped to the `Engineering` team — no workspace-level labels.
+Two native label groups keep the taxonomy browsable:
 
-- **Triage roles** (`needs-triage`, `needs-info`, `ready-for-agent`,
-  `ready-for-human`): per `docs/agents/triage-labels.md`. `wontfix` is the
-  `Canceled` state, not a label.
-- **`cluster:<feature-slug>`**: groups tickets of one feature cluster.
+- **`triage` group** (`needs-triage`, `needs-info`, `ready-for-agent`,
+  `ready-for-human`): the triage roles per `docs/agents/triage-labels.md`.
+  `wontfix` is the `Canceled` state, not a label.
+- **`cluster` group** (`cluster:<feature-slug>`): groups tickets of one
+  feature cluster.
+
+Ungrouped labels:
+
 - **`architecture-backlog`**: open candidates from architecture reviews.
 - **`migrated-from-repo`**: historical marker for the 2026-07-30 migration;
   never applied to new issues.
