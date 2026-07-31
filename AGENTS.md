@@ -14,7 +14,7 @@ All coding work in this repo follows the [mattpocock/skills](https://github.com/
 
 ### Issue tracker
 
-GitHub Issues are disabled on this repo — tickets live as local files under `docs/tickets/<feature-slug>/`. See `docs/agents/issue-tracker.md`.
+Tickets live in Linear, in the [`Yiyin`](https://linear.app/wg-studio/project/yiyin-3ba958517518/overview) project (wg-studio workspace, team `C-level`). Local files under `docs/tickets/` are the frozen pre-migration record (see `docs/agents/linear-migration.md`). See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 

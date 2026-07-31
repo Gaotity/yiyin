@@ -1,44 +1,83 @@
-# Issue tracker: local files under `docs/tickets/`
+# Issue tracker: Linear `Yiyin` project
 
-Tickets and PRDs for this repo are **local Markdown files committed with the code**. GitHub Issues is enabled on `Gaotity/yiyin` but is **not** the canonical tracker: the legacy-tree audit issues #26–#39 were converted to `docs/tickets/legacy-electron-audit/` on 2026-07-29, and new work is tracked locally. Pull requests remain on GitHub — use the `gh` CLI for PR operations.
+The canonical issue tracker for this repo is the Linear
+[`Yiyin`](https://linear.app/wg-studio/project/yiyin-3ba958517518/overview)
+project (wg-studio workspace, team `C-level`). Pull requests remain on GitHub —
+use the `gh` CLI for PR operations. Local files under `docs/tickets/` are the
+**frozen pre-migration record** (migrated 2026-07-30; see
+`docs/agents/linear-migration.md`); new work is tracked in Linear only.
+
+## Access
+
+Use the Linear GraphQL API at `https://api.linear.app/graphql` with the
+`LINEAR_PERSONAL_PROJECT_FULL_ACCESS_API_KEY` environment variable as the
+`Authorization` header. The key lives locally; never commit it, never print it.
+
+Useful ids (not secrets):
+
+- Team `C-level`: `bca72391-8cfe-4be9-9bcd-81a65184df34`
+- Project `Yiyin`: `d48a0d5f-f9cc-491b-9b43-5d816dfff6eb`
 
 ## Conventions
 
-- **Layout**: one directory per feature (`docs/tickets/<feature-slug>/`), one file per ticket named `NN-<slug>.md`, numbered from `01` in dependency order (e.g. `docs/tickets/tauri-rust-rewrite/`).
-- **Ticket format**: a `# NN — <title>` heading, a `**What to build:**` paragraph, `**Blocked by:**` (ticket numbers or `None`), `**Status:**`, and a `- [ ]` checklist.
-- **Status values**: `needs-triage` for raw incoming items, `in progress` once claimed, `completed` when the delivering PR merges, `wontfix — <reason>` when triaged away (also terminal). The triage-role vocabulary lives in `docs/agents/triage-labels.md`.
-- **Create a ticket**: write the file in the feature directory and commit it — either with the work it describes or as a standalone docs commit.
-- **Read a ticket**: read the file.
-- **List open tickets**: `grep -r '^\*\*Status:\*\*' docs/tickets` — anything not `completed` and not `wontfix` is open.
-- **Close a ticket**: set `**Status:** completed` and check every checkbox (with evidence notes) in the PR that delivers the work, so the ticket state lands on `main` together with the code. A ticket closed without delivery gets `**Status:** wontfix — <reason>` with the evidence recorded in its triage notes.
-
-## Pull requests as a triage surface
-
-**PRs as a request surface: no.** _(Set to `yes` if this repo treats external PRs as feature requests; `/triage` reads this flag.)_
-
-When set to `yes`, PRs run through the same roles as tickets, using the `gh pr` equivalents:
-
-- **Read a PR**: `gh pr view <number> --comments` and `gh pr diff <number>` for the diff.
-- **List external PRs for triage**: `gh pr list --state open --json number,title,body,labels,author,authorAssociation` then keep only `authorAssociation` of `CONTRIBUTOR`, `FIRST_TIME_CONTRIBUTOR`, or `NONE` (drop `OWNER`/`MEMBER`/`COLLABORATOR`).
-- **Comment / label / close**: `gh pr comment`, `gh pr edit --add-label`, `gh pr close`.
-
-GitHub shares one number space across issues and PRs, so a bare `#42` may be either — resolve with `gh pr view 42` and fall back to `gh issue view 42`.
+- **One issue per ticket** in the Yiyin project; title `[<feature-slug>] <title>`.
+- **Descriptions are bilingual**: complete English block, a `---` divider, the
+  complete Simplified Chinese block, then one shared `## References` section at
+  the bottom (external-collaboration rule).
+- **States**: `Backlog` (new/unprioritized) → `Todo` → `In Progress` (claimed)
+  → `In Review` (delivering PR open) → `Done` (PR merged). `Canceled` is the
+  terminal wontfix state.
+- **Labels**: triage roles per `docs/agents/triage-labels.md`;
+  `cluster:<feature-slug>` groups a feature's tickets; `architecture-backlog`
+  for architecture-review candidates; `migrated-from-repo` marks migrated
+  history.
+- **Blocking edges**: native Linear issue relations (`blocks` / `blocked by`)
+  via `issueRelationCreate` — a ticket is unblocked when every blocking issue
+  is `Done`.
 
 ## When a skill says "publish to the issue tracker"
 
-Write the local ticket file under `docs/tickets/<feature-slug>/`. Do not call `gh issue create`.
+Create the issue in the Yiyin project via `issueCreate` (team `C-level`,
+project `Yiyin`), following the conventions above. Do **not** create local
+files under `docs/tickets/` and do **not** call `gh issue create`.
 
 ## When a skill says "fetch the relevant ticket"
 
-Read the ticket file under `docs/tickets/`.
+Query Linear: fetch a single issue by identifier (`{ issue(id: "C-42") { ... } }`)
+or search by title (`{ issues(filter: { title: { contains: "..." } }) { nodes { ... } } }`).
+
+## List open tickets
+
+Project issues whose state is neither `Done` nor `Canceled`:
+
+```graphql
+{
+  project(id: "yiyin-3ba958517518") {
+    issues(filter: { state: { type: { nin: ["completed", "canceled"] } } }) {
+      nodes { identifier title state { name } labels { nodes { name } } }
+    }
+  }
+}
+```
 
 ## Wayfinding operations
 
-Used by `/wayfinder`. The **map** is a hub ticket file in the feature directory (e.g. `docs/tickets/legacy-electron-audit/00-tracking-hub.md`) holding the Notes / Decisions-so-far / Fog body and an index of its child tickets.
+Used by `/wayfinder`. The **map** is a parent issue; child tickets are its
+sub-issues.
 
-- **Map**: a `00-<slug>.md` hub file in the feature directory.
-- **Child ticket**: a numbered ticket file listed in the hub's index. Where a finding cluster has no hub yet, create the directory with the first ticket and add the hub when the map forms.
-- **Blocking**: the `**Blocked by:**` line in each child file. A ticket is unblocked when every listed blocker reads `**Status:** completed`.
-- **Frontier query**: scan the hub's index for child files whose status is neither `completed` nor `wontfix` and whose blockers are all completed; first in hub order wins.
-- **Claim**: set the child's `**Status:** in progress` — the session's first write to that file.
-- **Resolve**: record the answer in the child file, set `**Status:** completed`, then append a context pointer to the hub's Decisions-so-far.
+- **Map**: one issue titled `[<feature-slug>] Map: <name>` holding the Notes /
+  Decisions-so-far / Fog body in its description.
+- **Child ticket**: an issue created with `parentId` set to the map issue.
+- **Blocking**: `issueRelationCreate` with type `blocks`. A child is unblocked
+  when every related blocker is `Done`.
+- **Frontier query**: among the map's sub-issues, those not `Done`/`Canceled`
+  whose blockers are all `Done`; first by sort order wins.
+- **Claim**: move the child to `In Progress` (assign the operator).
+- **Resolve**: record the answer in the child's description (or a bilingual
+  comment), move it to `Done`, and append a context pointer to the map issue's
+  Decisions-so-far section.
+
+## Pull requests as a triage surface
+
+**PRs as a request surface: no.** External collaboration happens on Linear
+issues, not GitHub PRs.
