@@ -34,6 +34,12 @@ Useful ids (not secrets):
 - **Blocking edges**: native Linear issue relations (`blocks` / `blocked by`)
   via `issueRelationCreate` — a ticket is unblocked when every blocking issue
   is `Done`.
+- **PR linkage**: when a PR delivers (part of) an issue, attach it to the
+  issue via `attachmentLinkGitHubPR(issueId, url)` at PR creation, so the
+  issue shows its PR source and live PR status. Historical PRs were
+  back-linked on 2026-07-30 (rewrite cluster → #3, hardening → #45–#48/#50,
+  map → #51, ADR tickets → #52/#53/#56, actions-usage → #19/#25, audit hub →
+  #43/#44).
 
 ## When a skill says "publish to the issue tracker"
 
