@@ -2,10 +2,10 @@
 
 The canonical issue tracker for this repo is the Linear
 [`Yiyin`](https://linear.app/wg-studio/project/yiyin-3ba958517518/overview)
-project (wg-studio workspace, team `C-level`). Pull requests remain on GitHub —
-use the `gh` CLI for PR operations. Local files under `docs/tickets/` are the
-**frozen pre-migration record** (migrated 2026-07-30; see
-`docs/agents/linear-migration.md`); new work is tracked in Linear only.
+project (wg-studio workspace, team `Engineering` / `ENG`). Pull requests remain
+on GitHub — use the `gh` CLI for PR operations. Local files under
+`docs/tickets/` are the **frozen pre-migration record** (migrated 2026-07-30;
+see `docs/agents/linear-migration.md`); new work is tracked in Linear only.
 
 ## Access
 
@@ -15,7 +15,7 @@ Use the Linear GraphQL API at `https://api.linear.app/graphql` with the
 
 Useful ids (not secrets):
 
-- Team `C-level`: `bca72391-8cfe-4be9-9bcd-81a65184df34`
+- Team `Engineering` (`ENG`): `2c3c7af6-8cac-41fe-ad0b-6dd1f536aa8c`
 - Project `Yiyin`: `d48a0d5f-f9cc-491b-9b43-5d816dfff6eb`
 
 ## Conventions
@@ -37,13 +37,13 @@ Useful ids (not secrets):
 
 ## When a skill says "publish to the issue tracker"
 
-Create the issue in the Yiyin project via `issueCreate` (team `C-level`,
+Create the issue in the Yiyin project via `issueCreate` (team `Engineering`,
 project `Yiyin`), following the conventions above. Do **not** create local
 files under `docs/tickets/` and do **not** call `gh issue create`.
 
 ## When a skill says "fetch the relevant ticket"
 
-Query Linear: fetch a single issue by identifier (`{ issue(id: "C-42") { ... } }`)
+Query Linear: fetch a single issue by identifier (`{ issue(id: "ENG-42") { ... } }`)
 or search by title (`{ issues(filter: { title: { contains: "..." } }) { nodes { ... } } }`).
 
 ## List open tickets
