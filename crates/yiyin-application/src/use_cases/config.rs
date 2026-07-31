@@ -1,30 +1,62 @@
 use std::{collections::BTreeSet, sync::Arc};
 
-use yiyin_domain::{Config, OutputDirectory};
+use yiyin_domain::{Config, FieldContentKind, OutputDirectory, ResourceKind};
 
-use crate::{ApplicationError, ConfigRepository, OutputDirectoryGateway};
+use crate::{ApplicationError, ConfigRepository, OutputDirectoryGateway, ResourceRepository};
 
 pub struct UpdateConfig {
     repository: Arc<dyn ConfigRepository>,
+    resources: Arc<dyn ResourceRepository>,
 }
 
 impl UpdateConfig {
     #[must_use]
-    pub const fn new(repository: Arc<dyn ConfigRepository>) -> Self {
-        Self { repository }
+    pub const fn new(
+        repository: Arc<dyn ConfigRepository>,
+        resources: Arc<dyn ResourceRepository>,
+    ) -> Self {
+        Self {
+            repository,
+            resources,
+        }
     }
 
     /// Validates and persists a complete configuration transaction.
     ///
     /// # Errors
     ///
-    /// Returns `CONFIG_INVALID` without writing when required values or stable
-    /// keys are invalid, otherwise forwards repository errors. The output
-    /// directory needs no check here: its value object is always non-empty.
+    /// Returns `CONFIG_INVALID` without writing when required values, stable
+    /// keys, or image resource references are invalid, otherwise forwards
+    /// repository errors. The output directory needs no check here: its value
+    /// object is always non-empty.
     pub fn execute(&self, config: Config) -> Result<Config, ApplicationError> {
         validate(&config)?;
+        self.validate_resource_references(&config)?;
         self.repository.store(&config)?;
         Ok(config)
+    }
+
+    /// Image template fields may only reference bundled assets or overlays.
+    fn validate_resource_references(&self, config: &Config) -> Result<(), ApplicationError> {
+        for id in config
+            .temp_fields
+            .iter()
+            .chain(&config.custom_temp_fields)
+            .filter(|field| field.content_kind() == FieldContentKind::Image)
+            .flat_map(|field| [field.dark_image(), field.light_image()])
+            .flatten()
+        {
+            let valid = self.resources.resolve(id).is_ok_and(|record| {
+                matches!(
+                    record.kind(),
+                    ResourceKind::BundledAsset | ResourceKind::Overlay
+                )
+            });
+            if !valid {
+                return Err(ApplicationError::config_invalid());
+            }
+        }
+        Ok(())
     }
 }
 

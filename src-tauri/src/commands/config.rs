@@ -5,7 +5,6 @@
 )]
 
 use tauri::State;
-use yiyin_domain::{Config, FieldContentKind, ResourceKind};
 
 use crate::{
     dto::{PublicConfigDto, UpdateConfigRequestDto},
@@ -20,7 +19,6 @@ pub fn update_config(
 ) -> CommandResult<PublicConfigDto> {
     let current = state.config.load()?;
     let next = request.config.apply_to(&current)?;
-    validate_resource_references(&next, &state)?;
     state
         .update_config
         .execute(next)
@@ -39,26 +37,4 @@ pub fn reset_config(state: State<'_, AppState>) -> CommandResult<PublicConfigDto
         .execute(config.output.clone())
         .map_err(crate::dto::CommandErrorDto::from)?;
     Ok((&config).into())
-}
-
-fn validate_resource_references(config: &Config, state: &AppState) -> CommandResult<()> {
-    for id in config
-        .temp_fields
-        .iter()
-        .chain(&config.custom_temp_fields)
-        .filter(|field| field.content_kind() == FieldContentKind::Image)
-        .flat_map(|field| [field.dark_image(), field.light_image()])
-        .flatten()
-    {
-        let valid = state.resources.resolve(id).is_ok_and(|record| {
-            matches!(
-                record.kind(),
-                ResourceKind::BundledAsset | ResourceKind::Overlay
-            )
-        });
-        if !valid {
-            return Err(yiyin_application::ApplicationError::config_invalid().into());
-        }
-    }
-    Ok(())
 }
