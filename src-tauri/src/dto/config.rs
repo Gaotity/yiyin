@@ -1,10 +1,12 @@
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 use yiyin_application::{ApplicationError, BootstrapSnapshot};
 use yiyin_domain::{
     BackgroundBlur, BackgroundRatio, CaseConversion, Config, FieldContentKind, FontFamily,
-    FontSpec, MainImageWidth, MiniTopBottomMargin, Quality, Radius, RenderOptions, ResourceId,
-    Shadow, SolidColor, Template, TemplateField, TemplateKind, TextMargin, VerticalAlign,
-    default_template_fields, default_templates,
+    FontSpec, MainImageWidth, MiniTopBottomMargin, NumericConstraint, NumericOption, Quality,
+    Radius, RenderOptions, ResourceId, Shadow, SolidColor, Template, TemplateField, TemplateKind,
+    TextMargin, VerticalAlign, default_template_fields, default_templates,
 };
 
 use super::{ResourceDescriptorDto, TaskDescriptorDto};
@@ -462,12 +464,61 @@ pub struct UpdateConfigRequestDto {
     pub config: PublicConfigDto,
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(test, ts(rename_all = "camelCase"))]
+pub struct NumericConstraintDto {
+    pub minimum: f64,
+    pub maximum: f64,
+    pub decimals: u8,
+}
+
+impl From<&NumericConstraint> for NumericConstraintDto {
+    fn from(value: &NumericConstraint) -> Self {
+        Self {
+            minimum: value.minimum(),
+            maximum: value.maximum(),
+            decimals: value.decimals(),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(test, ts(rename_all = "camelCase"))]
+pub enum NumericOptionDto {
+    MainImageWidth,
+    TextMargin,
+    MiniTopBottomMargin,
+    Radius,
+    Shadow,
+    Quality,
+    BackgroundBlur,
+}
+
+impl From<NumericOption> for NumericOptionDto {
+    fn from(value: NumericOption) -> Self {
+        match value {
+            NumericOption::MainImageWidth => Self::MainImageWidth,
+            NumericOption::TextMargin => Self::TextMargin,
+            NumericOption::MiniTopBottomMargin => Self::MiniTopBottomMargin,
+            NumericOption::Radius => Self::Radius,
+            NumericOption::Shadow => Self::Shadow,
+            NumericOption::Quality => Self::Quality,
+            NumericOption::BackgroundBlur => Self::BackgroundBlur,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(test, ts(rename_all = "camelCase"))]
 pub struct BootstrapDto {
     pub config: PublicConfigDto,
+    pub constraints: BTreeMap<NumericOptionDto, NumericConstraintDto>,
     pub resources: Vec<ResourceDescriptorDto>,
     pub tasks: Vec<TaskDescriptorDto>,
     pub warnings: Vec<String>,
@@ -477,6 +528,11 @@ impl From<&BootstrapSnapshot> for BootstrapDto {
     fn from(value: &BootstrapSnapshot) -> Self {
         Self {
             config: value.config().into(),
+            constraints: value
+                .constraints()
+                .iter()
+                .map(|(option, constraint)| ((*option).into(), constraint.into()))
+                .collect(),
             resources: value.resources().iter().map(Into::into).collect(),
             tasks: value.tasks().iter().map(Into::into).collect(),
             warnings: value.warnings().to_vec(),

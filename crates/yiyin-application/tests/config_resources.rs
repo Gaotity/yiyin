@@ -12,8 +12,8 @@ use yiyin_application::{
     TaskSnapshot, UpdateConfig,
 };
 use yiyin_domain::{
-    BuiltInField, Config, ImageDimensions, Metadata, OutputDirectory, RenderRequest, RenderStage,
-    ResourceId, ResourceKind, TaskId, TaskStatus,
+    BuiltInField, Config, ImageDimensions, Metadata, NumericConstraint, NumericOption,
+    OutputDirectory, RenderRequest, RenderStage, ResourceId, ResourceKind, TaskId, TaskStatus,
 };
 
 #[derive(Clone)]
@@ -325,6 +325,31 @@ fn bootstrap_imports_before_returning_safe_snapshots() {
     assert_eq!(snapshot.warnings(), &["legacy warning"]);
     assert_eq!(snapshot.resources()[0].display_name(), "Body");
     assert!(!format!("{snapshot:?}").contains("/private/font.ttf"));
+}
+
+#[test]
+fn bootstrap_ships_all_seven_numeric_constraints_from_the_domain() {
+    let snapshot = Bootstrap::new(
+        Arc::new(FakeConfig::default()),
+        Arc::new(FakeResources::default()),
+        Arc::new(FakeQueue::default()),
+    )
+    .execute()
+    .expect("bootstrap");
+
+    let constraints = snapshot.constraints();
+    assert_eq!(constraints.len(), 7);
+    for option in NumericOption::ALL {
+        assert_eq!(constraints.get(&option), Some(&option.constraint()));
+    }
+    assert_eq!(
+        constraints.get(&NumericOption::Radius),
+        Some(&NumericConstraint::new(0.0, 50.0, 1))
+    );
+    assert_eq!(
+        constraints.get(&NumericOption::TextMargin),
+        Some(&NumericConstraint::new(0.0, 10_000.0, 2))
+    );
 }
 
 #[test]

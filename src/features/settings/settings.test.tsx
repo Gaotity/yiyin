@@ -89,7 +89,7 @@ const HELP_TEXT = [
     '指定阴影的大小，不指定则无阴影\n设置的值为图片高度的百分比，例如: 1，则为0.01%\n默认值：6',
   ],
   ['输出质量', '指定输出质量，只允许整数\n默认值：100'],
-  ['背景模糊', '指定背景图片的模糊程度\n取值范围: 0 - 100\n默认值: 15'],
+  ['背景模糊', '指定背景图片的模糊程度\n取值范围: 0 - 100\n默认值: 100'],
   [
     '输出宽高比',
     '指定输出的图片的宽高比(该比例只生效于背景，对原图不生效)\n该选项生效后影响以下选项效果：\n横屏输出：失效',
@@ -471,7 +471,13 @@ describe('settings parity', () => {
     vi.useFakeTimers()
     const config = bootstrap().config
     const save = vi.fn(async (next: PublicConfigDto) => next)
-    const view = render(<RenderingSettings config={config} onSave={save} />)
+    const view = render(
+      <RenderingSettings
+        config={config}
+        constraints={bootstrap().constraints}
+        onSave={save}
+      />,
+    )
     const slider = screen.getByLabelText('背景模糊滑块')
 
     fireEvent.change(slider, { target: { value: '20' } })
@@ -484,5 +490,42 @@ describe('settings parity', () => {
 
     view.unmount()
     vi.useRealTimers()
+  })
+
+  it('clamps with the bootstrap constraints prop, never a local table', async () => {
+    const config = bootstrap().config
+    const constraints = {
+      ...bootstrap().constraints,
+      // Deliberately not the domain truth: clamping must follow the prop.
+      quality: { minimum: 5, maximum: 42, decimals: 0 },
+      backgroundBlur: { minimum: 10, maximum: 55, decimals: 0 },
+    }
+    const save = vi.fn(async (next: PublicConfigDto) => next)
+    render(
+      <RenderingSettings
+        config={config}
+        constraints={constraints}
+        onSave={save}
+      />,
+    )
+
+    fireEvent.change(screen.getByLabelText('输出质量'), {
+      target: { value: '100' },
+    })
+    fireEvent.blur(screen.getByLabelText('输出质量'))
+    await waitFor(() => expect(save).toHaveBeenCalled())
+    expect(save.mock.calls[0]?.[0].options.quality).toBe(42)
+
+    fireEvent.change(screen.getByLabelText('输出质量'), {
+      target: { value: '1' },
+    })
+    fireEvent.blur(screen.getByLabelText('输出质量'))
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(2))
+    expect(save.mock.calls[1]?.[0].options.quality).toBe(5)
+
+    const slider = screen.getByLabelText('背景模糊滑块')
+    expect(slider.getAttribute('min')).toBe('10')
+    expect(slider.getAttribute('max')).toBe('55')
+    expect(slider.getAttribute('step')).toBe('1')
   })
 })

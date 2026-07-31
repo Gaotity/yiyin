@@ -57,6 +57,33 @@ fn public_config_round_trip_preserves_rust_owned_output_and_system_invariants() 
 }
 
 #[test]
+fn bootstrap_dto_serializes_numeric_constraints_with_camel_case_keys() {
+    let snapshot = yiyin_application::BootstrapSnapshot::new(
+        yiyin_domain::Config::default(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+    );
+    let dto = dto_under_test::BootstrapDto::from(&snapshot);
+    let serialized = serde_json::to_value(&dto).expect("serialize bootstrap dto");
+    let constraints = serialized.get("constraints").expect("constraints field");
+
+    assert_eq!(constraints.as_object().expect("object").len(), 7);
+    assert_eq!(
+        constraints["radius"],
+        serde_json::json!({"minimum": 0.0, "maximum": 50.0, "decimals": 1})
+    );
+    assert_eq!(
+        constraints["textMargin"],
+        serde_json::json!({"minimum": 0.0, "maximum": 10000.0, "decimals": 2})
+    );
+    assert_eq!(
+        constraints["backgroundBlur"],
+        serde_json::json!({"minimum": 0.0, "maximum": 100.0, "decimals": 0})
+    );
+}
+
+#[test]
 fn drag_drop_notification_reuses_the_path_free_task_status_contract() {
     let task = dto_under_test::TaskDescriptorDto {
         id: "opaque-task-id".to_owned(),

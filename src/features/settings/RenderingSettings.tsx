@@ -1,28 +1,30 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Switch } from '../../components/Switch'
-import type { PublicConfigDto, RenderOptionsDto } from '../../platform/types'
+import type {
+  BootstrapDto,
+  NumericConstraintDto,
+  PublicConfigDto,
+  RenderOptionsDto,
+} from '../../platform/types'
 
 interface RenderingSettingsProps {
   config: PublicConfigDto
+  constraints: BootstrapDto['constraints']
   onSave(config: PublicConfigDto): Promise<PublicConfigDto>
 }
 
+type NumericOptionKey = keyof BootstrapDto['constraints']
+
+const UNBOUNDED: NumericConstraintDto = {
+  minimum: -Number.MAX_SAFE_INTEGER,
+  maximum: Number.MAX_SAFE_INTEGER,
+  decimals: 3,
+}
+
 interface NumberSetting {
-  key: keyof Pick<
-    RenderOptionsDto,
-    | 'mainImageWidth'
-    | 'textMargin'
-    | 'miniTopBottomMargin'
-    | 'radius'
-    | 'shadow'
-    | 'quality'
-    | 'backgroundBlur'
-  >
+  key: NumericOptionKey
   label: string
   help: string
-  minimum: number
-  maximum: number
-  decimals: number
 }
 
 const NUMBER_SETTINGS: NumberSetting[] = [
@@ -30,66 +32,50 @@ const NUMBER_SETTINGS: NumberSetting[] = [
     key: 'mainImageWidth',
     label: '主图占比',
     help: '指定主图对背景宽度的占比（可以调节左右边框的宽度）\n默认主图占背景的90%',
-    minimum: 1,
-    maximum: 100,
-    decimals: 0,
   },
   {
     key: 'textMargin',
     label: '文本间距',
     help: '指定文本上下间距（临时性功能，后续会去掉）\n默认0.4',
-    minimum: 0,
-    maximum: 10_000,
-    decimals: 2,
   },
   {
     key: 'miniTopBottomMargin',
     label: '最小上下边距',
     help: '指定水印上下边距的最小值，默认情况使用阴影宽度作为上下边距\n设置最小上下边距，将会从它和阴影之间取最大值\n按照背景高度比例换算，值为 0-100\n默认：0',
-    minimum: 0,
-    maximum: 100,
-    decimals: 2,
   },
   {
     key: 'radius',
     label: '圆角大小',
     help: '指定圆角的大小，不指定则为直角\n取值范围: 0 - 50\n默认值: 2.1',
-    minimum: 0,
-    maximum: 50,
-    decimals: 1,
   },
   {
     key: 'shadow',
     label: '阴影大小',
     help: '指定阴影的大小，不指定则无阴影\n设置的值为图片高度的百分比，例如: 1，则为0.01%\n默认值：6',
-    minimum: 0,
-    maximum: 50,
-    decimals: 1,
   },
   {
     key: 'quality',
     label: '输出质量',
     help: '指定输出质量，只允许整数\n默认值：100',
-    minimum: 1,
-    maximum: 100,
-    decimals: 0,
   },
   {
     key: 'backgroundBlur',
     label: '背景模糊',
-    help: '指定背景图片的模糊程度\n取值范围: 0 - 100\n默认值: 15',
-    minimum: 0,
-    maximum: 100,
-    decimals: 0,
+    help: '指定背景图片的模糊程度\n取值范围: 0 - 100\n默认值: 100',
   },
 ]
 
-export function RenderingSettings({ config, onSave }: RenderingSettingsProps) {
+export function RenderingSettings({
+  config,
+  constraints,
+  onSave,
+}: RenderingSettingsProps) {
   const [draft, setDraft] = useState(config)
   const [error, setError] = useState('')
   const blurTimer = useRef<number | null>(null)
   const pendingBlur = useRef<PublicConfigDto | null>(null)
   const onSaveRef = useRef(onSave)
+  const blurConstraint = constraints.backgroundBlur ?? UNBOUNDED
 
   useEffect(() => setDraft(config), [config])
   useEffect(() => {
@@ -127,11 +113,12 @@ export function RenderingSettings({ config, onSave }: RenderingSettingsProps) {
   }
 
   const saveNumber = (setting: NumberSetting, raw: string) => {
+    const constraint = constraints[setting.key] ?? UNBOUNDED
     const value = canonicalNumber(
       raw,
-      setting.minimum,
-      setting.maximum,
-      setting.decimals,
+      constraint.minimum,
+      constraint.maximum,
+      constraint.decimals,
     )
     void commit(
       updateOptions((options) => {
@@ -141,7 +128,12 @@ export function RenderingSettings({ config, onSave }: RenderingSettingsProps) {
   }
 
   const scheduleBlur = (raw: string) => {
-    const value = canonicalNumber(raw, 0, 100, 0)
+    const value = canonicalNumber(
+      raw,
+      blurConstraint.minimum,
+      blurConstraint.maximum,
+      blurConstraint.decimals,
+    )
     const next = updateOptions((options) => {
       options.backgroundBlur = value
     })
@@ -206,9 +198,9 @@ export function RenderingSettings({ config, onSave }: RenderingSettingsProps) {
             <input
               aria-label="背景模糊滑块"
               type="range"
-              min="0"
-              max="100"
-              step="1"
+              min={blurConstraint.minimum}
+              max={blurConstraint.maximum}
+              step={10 ** -blurConstraint.decimals}
               value={draft.options.backgroundBlur}
               onChange={(event) => scheduleBlur(event.currentTarget.value)}
               onBlur={flushBlur}

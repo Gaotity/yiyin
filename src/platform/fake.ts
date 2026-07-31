@@ -65,6 +65,18 @@ export function defaultBootstrap(
       customTemplateFields: [],
       templates: [],
     },
+    // Fixture copy of the domain-generated values — nothing mechanically
+    // couples these; keep in sync with
+    // numeric_constraints_match_the_validation_bounds in yiyin-domain.
+    constraints: {
+      mainImageWidth: { minimum: 1, maximum: 100, decimals: 0 },
+      textMargin: { minimum: 0, maximum: 10_000, decimals: 2 },
+      miniTopBottomMargin: { minimum: 0, maximum: 100, decimals: 2 },
+      radius: { minimum: 0, maximum: 50, decimals: 1 },
+      shadow: { minimum: 0, maximum: 50, decimals: 1 },
+      quality: { minimum: 1, maximum: 100, decimals: 0 },
+      backgroundBlur: { minimum: 0, maximum: 100, decimals: 0 },
+    },
     resources: [],
     tasks: [],
     warnings: [],

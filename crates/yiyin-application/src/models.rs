@@ -1,5 +1,8 @@
+use std::collections::BTreeMap;
+
 use yiyin_domain::{
-    Config, ImageDensity, ImageDimensions, ResourceId, ResourceKind, TaskId, TaskState,
+    Config, ImageDensity, ImageDimensions, NumericConstraint, NumericOption, ResourceId,
+    ResourceKind, TaskId, TaskState,
 };
 
 use crate::ResourceRecord;
@@ -262,6 +265,7 @@ impl RenderResult {
 #[derive(Clone, Debug, PartialEq)]
 pub struct BootstrapSnapshot {
     config: Config,
+    constraints: BTreeMap<NumericOption, NumericConstraint>,
     resources: Vec<ResourceSnapshot>,
     tasks: Vec<TaskSnapshot>,
     warnings: Vec<String>,
@@ -269,7 +273,7 @@ pub struct BootstrapSnapshot {
 
 impl BootstrapSnapshot {
     #[must_use]
-    pub const fn new(
+    pub fn new(
         config: Config,
         resources: Vec<ResourceSnapshot>,
         tasks: Vec<TaskSnapshot>,
@@ -277,6 +281,10 @@ impl BootstrapSnapshot {
     ) -> Self {
         Self {
             config,
+            constraints: NumericOption::ALL
+                .into_iter()
+                .map(|option| (option, option.constraint()))
+                .collect(),
             resources,
             tasks,
             warnings,
@@ -286,6 +294,11 @@ impl BootstrapSnapshot {
     #[must_use]
     pub const fn config(&self) -> &Config {
         &self.config
+    }
+
+    #[must_use]
+    pub fn constraints(&self) -> &BTreeMap<NumericOption, NumericConstraint> {
+        &self.constraints
     }
 
     #[must_use]

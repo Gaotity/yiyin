@@ -38,6 +38,8 @@ pub fn generated_types() -> String {
     let config = Config::default();
     let declarations = [
         BootstrapDto::decl(&config),
+        NumericConstraintDto::decl(&config),
+        NumericOptionDto::decl(&config),
         PublicConfigDto::decl(&config),
         RenderOptionsDto::decl(&config),
         BackgroundRatioDto::decl(&config),
