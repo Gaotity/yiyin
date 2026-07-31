@@ -110,7 +110,7 @@ bounded_decimal!(TextMargin, "text_margin", 0.0, 10_000.0, 2);
 bounded_decimal!(MiniTopBottomMargin, "mini_top_bottom_margin", 0.0, 100.0, 2);
 
 /// The numeric render options whose constraints ship to the frontend.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum NumericOption {
     MainImageWidth,
     TextMargin,
