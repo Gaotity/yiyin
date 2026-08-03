@@ -21,7 +21,8 @@ impl UpdateConfig {
         }
     }
 
-    /// Validates and persists a complete configuration transaction.
+    /// Normalizes, validates, and persists a complete configuration
+    /// transaction.
     ///
     /// # Errors
     ///
@@ -29,7 +30,8 @@ impl UpdateConfig {
     /// keys, or image resource references are invalid, otherwise forwards
     /// repository errors. The output directory needs no check here: its value
     /// object is always non-empty.
-    pub fn execute(&self, config: Config) -> Result<Config, ApplicationError> {
+    pub fn execute(&self, mut config: Config) -> Result<Config, ApplicationError> {
+        config.normalize();
         validate(&config)?;
         self.validate_resource_references(&config)?;
         self.repository.store(&config)?;
@@ -106,6 +108,7 @@ impl SetOutputDirectory {
     /// directory (ADR 0002).
     pub fn execute(&self, output: OutputDirectory) -> Result<Config, ApplicationError> {
         let mut config = self.repository.load()?;
+        config.normalize();
         config.output = output;
         self.output.ensure_root(&config.output)?;
         self.repository.store(&config)?;

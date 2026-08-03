@@ -28,6 +28,10 @@ _Avoid_: output path, save folder, `output` string
 The minimum/maximum/decimals policy for the numeric render options, owned by the domain's bounded value objects and shipped to the frontend through the bootstrap payload. The frontend consumes them for clamping — a UX responsibility — and never maintains its own bounds table.
 _Avoid_: hand-copied bounds, clamp constants, settings table bounds
 
+**Background ratio guide coupling**:
+An active background ratio guide forces landscape output off. The domain owns the rule (`Config::normalize`) and silently normalizes it on every config write path; the frontend mirrors it in the `setBackgroundRatioVisible` edit intent so the UI never displays the contradictory combination.
+_Avoid_: ratio-guide checks in UI handlers, coupled toggle
+
 ### Templates
 
 **Template**:

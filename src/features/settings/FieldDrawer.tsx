@@ -6,6 +6,7 @@ import type {
   ResourceDescriptorDto,
   TemplateFieldDto,
 } from '../../platform/types'
+import { removeCustomTemplateField, upsertTemplateField } from './configIntents'
 import { FieldDialog } from './FieldDialog'
 
 interface FieldDrawerProps {
@@ -31,23 +32,11 @@ export function FieldDrawer({
   const [editing, setEditing] = useState<EditingField | null>(null)
 
   const updateField = async (field: TemplateFieldDto, custom: boolean) => {
-    const next = structuredClone(config)
-    const list = custom ? next.customTemplateFields : next.templateFields
-    const index = list.findIndex((candidate) => candidate.key === field.key)
-    if (index === -1) {
-      list.push(field)
-    } else {
-      list[index] = field
-    }
-    await onSave(next)
+    await onSave(upsertTemplateField(config, field, custom))
   }
 
   const removeCustom = async (key: string) => {
-    const next = structuredClone(config)
-    next.customTemplateFields = next.customTemplateFields.filter(
-      (field) => field.key !== key,
-    )
-    await onSave(next)
+    await onSave(removeCustomTemplateField(config, key))
   }
 
   return (

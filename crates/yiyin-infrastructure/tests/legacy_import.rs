@@ -325,6 +325,27 @@ fn one_invalid_option_falls_back_to_its_default_without_losing_valid_settings() 
 }
 
 #[test]
+fn an_active_ratio_guide_imports_with_landscape_forced_off() {
+    let harness = Harness::new();
+    let root = harness.support.join("壹印");
+    fs::create_dir_all(&root).expect("legacy root");
+    fs::write(
+        root.join("config.json"),
+        r#"{"version":"1.6.0","output":"/legacy/output","options":{"landscape":true,"bg_rate_show":true},"tempFields":[],"customTempFields":[],"temps":[]}"#,
+    )
+    .expect("legacy config");
+
+    harness
+        .repository()
+        .import_legacy_if_needed()
+        .expect("import normalizes the ratio-guide coupling");
+
+    let config = harness.repository().load().expect("load config");
+    assert!(config.options.background_ratio_visible);
+    assert!(!config.options.landscape);
+}
+
+#[test]
 fn an_unreadable_legacy_config_imports_as_defaults_with_a_warning() {
     let harness = Harness::new();
     let root = harness.support.join("壹印");

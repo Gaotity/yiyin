@@ -6,6 +6,7 @@ import { TitleBar } from '../features/chrome/TitleBar'
 import { FieldDrawer } from '../features/settings/FieldDrawer'
 import { RenderingSettings } from '../features/settings/RenderingSettings'
 import { TemplateDrawer } from '../features/settings/TemplateDrawer'
+import { setFont } from '../features/settings/configIntents'
 import '../features/settings/settings.css'
 import { TaskWorkspace } from '../features/tasks/TaskWorkspace'
 import '../features/tasks/tasks.css'
@@ -41,11 +42,9 @@ export function App({ client = tauriClient }: AppProps) {
       <TitleBar
         config={snapshot.config}
         resources={snapshot.resources}
-        onFontChange={(font) => {
-          const config = structuredClone(snapshot.config)
-          config.options.font = font
-          return controller.updateConfig(config)
-        }}
+        onFontChange={(font) =>
+          controller.updateConfig(setFont(snapshot.config, font))
+        }
         onRegisterFont={controller.registerFont}
         onRemoveFont={controller.removeFont}
         onReset={() => void controller.resetConfig()}

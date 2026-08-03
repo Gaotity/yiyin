@@ -2,6 +2,11 @@ import { useState } from 'react'
 import { Drawer } from '../../components/Drawer'
 import { Switch } from '../../components/Switch'
 import type { PublicConfigDto, TemplateDto } from '../../platform/types'
+import {
+  moveTemplate as moveTemplateIntent,
+  removeTemplate as removeTemplateIntent,
+  upsertTemplate,
+} from './configIntents'
 import { TemplateDialog } from './TemplateDialog'
 
 interface TemplateDrawerProps {
@@ -20,42 +25,22 @@ export function TemplateDrawer({
   const [editing, setEditing] = useState<TemplateDto | null | undefined>()
 
   const saveTemplate = async (template: TemplateDto) => {
-    const next = structuredClone(config)
-    const index = next.templates.findIndex(
-      (candidate) => candidate.key === template.key,
-    )
-    if (index === -1) {
-      next.templates.push(template)
-    } else {
-      next.templates[index] = template
-    }
-    await onSave(next)
+    await onSave(upsertTemplate(config, template))
   }
 
   const removeTemplate = async (template: TemplateDto) => {
-    if (template.kind === 'system') {
+    const next = removeTemplateIntent(config, template)
+    if (next === config) {
       return
     }
-    const next = structuredClone(config)
-    next.templates = next.templates.filter(
-      (candidate) => candidate.key !== template.key,
-    )
     await onSave(next)
   }
 
   const moveTemplate = async (index: number, offset: -1 | 1) => {
-    const destination = index + offset
-    if (destination < 0 || destination >= config.templates.length) {
+    const next = moveTemplateIntent(config, index, offset)
+    if (next === config) {
       return
     }
-    const next = structuredClone(config)
-    const current = next.templates[index]
-    const adjacent = next.templates[destination]
-    if (!current || !adjacent) {
-      return
-    }
-    next.templates[index] = adjacent
-    next.templates[destination] = current
     await onSave(next)
   }
 
