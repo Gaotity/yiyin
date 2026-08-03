@@ -1,5 +1,4 @@
 use std::{
-    ffi::OsString,
     io,
     path::{Path, PathBuf},
     sync::Arc,
@@ -61,12 +60,12 @@ impl JsonConfigRepository {
     }
 
     fn recover_invalid(&self, invalid_contents: &[u8]) -> Result<Config, ApplicationError> {
-        let invalid_backup = sibling_with_suffix(&self.path, ".invalid.bak");
+        let invalid_backup = crate::durable::with_suffix(&self.path, ".invalid.bak");
         self.filesystem
             .write_and_sync(&invalid_backup, invalid_contents)
             .map_err(internal_io)?;
 
-        let backup = sibling_with_suffix(&self.path, ".bak");
+        let backup = crate::durable::with_suffix(&self.path, ".bak");
         let recovered = if self.filesystem.exists(&backup) {
             self.filesystem
                 .read(&backup)
@@ -99,84 +98,18 @@ impl ConfigRepository for JsonConfigRepository {
 
     fn store(&self, config: &Config) -> Result<(), ApplicationError> {
         let bytes = encode_config(config)?;
-        atomic_write(self.filesystem.as_ref(), &self.path, &bytes, |contents| {
-            decode_config(contents).is_ok()
-        })
+        crate::durable::durable_publish(
+            self.filesystem.as_ref(),
+            &self.path,
+            &bytes,
+            Some(&|contents| decode_config(contents).is_ok()),
+            None,
+        )
     }
 
     fn import_legacy_if_needed(&self) -> Result<ImportOutcome, ApplicationError> {
         super::legacy_import::import_if_needed(self)
     }
-}
-
-pub(crate) fn atomic_write(
-    filesystem: &dyn FileSystem,
-    path: &Path,
-    contents: &[u8],
-    prior_is_valid: impl Fn(&[u8]) -> bool,
-) -> Result<(), ApplicationError> {
-    let parent = path
-        .parent()
-        .ok_or_else(|| ApplicationError::internal("configuration path has no parent"))?;
-    filesystem.create_dir_all(parent).map_err(internal_io)?;
-
-    let temporary = sibling_with_suffix(path, ".tmp");
-    if temporary.parent() != Some(parent) {
-        return Err(ApplicationError::forbidden());
-    }
-    if filesystem.exists(&temporary) {
-        remove_file_if_present(filesystem, &temporary)?;
-    }
-
-    if let Err(error) = filesystem.write_and_sync(&temporary, contents) {
-        let _ = remove_file_if_present(filesystem, &temporary);
-        return Err(internal_io(error));
-    }
-
-    let backup = sibling_with_suffix(path, ".bak");
-    let prior_valid = filesystem
-        .read(path)
-        .ok()
-        .filter(|bytes| prior_is_valid(bytes));
-    if prior_valid.is_some()
-        && let Err(error) = filesystem.copy(path, &backup)
-    {
-        let _ = remove_file_if_present(filesystem, &temporary);
-        return Err(internal_io(error));
-    }
-
-    if let Err(error) = filesystem.rename(&temporary, path) {
-        let _ = remove_file_if_present(filesystem, &temporary);
-        return Err(internal_io(error));
-    }
-
-    if let Err(error) = filesystem.sync_parent(path) {
-        if prior_valid.is_some() && filesystem.exists(&backup) {
-            let _ = filesystem.copy(&backup, path);
-        } else {
-            let _ = remove_file_if_present(filesystem, path);
-        }
-        return Err(internal_io(error));
-    }
-    Ok(())
-}
-
-fn remove_file_if_present(
-    filesystem: &dyn FileSystem,
-    path: &Path,
-) -> Result<(), ApplicationError> {
-    if filesystem.exists(path) {
-        filesystem.remove_file(path).map_err(internal_io)?;
-    }
-    Ok(())
-}
-
-fn sibling_with_suffix(path: &Path, suffix: &str) -> PathBuf {
-    let mut name = path
-        .file_name()
-        .map_or_else(OsString::new, std::ffi::OsStr::to_os_string);
-    name.push(suffix);
-    path.with_file_name(name)
 }
 
 #[allow(

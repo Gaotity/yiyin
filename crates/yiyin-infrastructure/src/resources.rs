@@ -1,6 +1,5 @@
 use std::{
     collections::HashMap,
-    ffi::OsString,
     path::{Path, PathBuf},
     sync::{Arc, RwLock},
 };
@@ -256,10 +255,16 @@ impl ResourceRegistry {
         })
         .map_err(|error| ApplicationError::internal(error.to_string()))?;
         let destination = self.owned_root.join(RESOURCE_MANIFEST);
-        crate::config::atomic_write(self.filesystem.as_ref(), &destination, &bytes, |contents| {
-            serde_json::from_slice::<ResourceManifest>(contents)
-                .is_ok_and(|manifest| manifest.version == RESOURCE_MANIFEST_VERSION)
-        })
+        crate::durable::durable_publish(
+            self.filesystem.as_ref(),
+            &destination,
+            &bytes,
+            Some(&|contents| {
+                serde_json::from_slice::<ResourceManifest>(contents)
+                    .is_ok_and(|manifest| manifest.version == RESOURCE_MANIFEST_VERSION)
+            }),
+            None,
+        )
     }
 
     fn publish_owned(
@@ -283,19 +288,14 @@ impl ResourceRegistry {
             .map_err(internal_io)?;
         let id = self.next_resource_id();
         let destination = directory.join(format!("{}.{}", id.as_str(), inspected.extension));
-        let temporary = with_suffix(&destination, ".tmp");
         let bytes = self.filesystem.read(source).map_err(internal_io)?;
-        if let Err(error) = self.filesystem.write_and_sync(&temporary, &bytes) {
-            let _ = remove_if_present(self.filesystem.as_ref(), &temporary);
-            return Err(internal_io(error));
-        }
-        if let Err(error) = self.filesystem.rename(&temporary, &destination) {
-            let _ = remove_if_present(self.filesystem.as_ref(), &temporary);
-            return Err(internal_io(error));
-        }
-        self.filesystem
-            .sync_parent(&destination)
-            .map_err(internal_io)?;
+        crate::durable::durable_publish(
+            self.filesystem.as_ref(),
+            &destination,
+            &bytes,
+            None,
+            None,
+        )?;
         let canonical = self
             .filesystem
             .canonicalize(&destination)
@@ -307,7 +307,7 @@ impl ResourceRegistry {
                 .records
                 .write()
                 .map(|mut records| records.remove(record.id()));
-            let _ = remove_if_present(self.filesystem.as_ref(), record.source());
+            let _ = crate::durable::remove_if_present(self.filesystem.as_ref(), record.source());
             return Err(error);
         }
         Ok(record)
@@ -406,7 +406,7 @@ impl ResourceRepository for ResourceRegistry {
             return Err(error);
         }
         if owned_resource || generated_preview {
-            remove_if_present(self.filesystem.as_ref(), record.source())?;
+            crate::durable::remove_if_present(self.filesystem.as_ref(), record.source())?;
         }
         Ok(())
     }
@@ -589,21 +589,6 @@ fn populate_image_density(inspected: &mut InspectedFile, source: &Path) {
             inspected.dimensions = ImageDimensions::new(dimensions.height, dimensions.width).ok();
         }
     }
-}
-
-fn with_suffix(path: &Path, suffix: &str) -> PathBuf {
-    let mut name = path
-        .file_name()
-        .map_or_else(OsString::new, std::ffi::OsStr::to_os_string);
-    name.push(suffix);
-    path.with_file_name(name)
-}
-
-fn remove_if_present(filesystem: &dyn FileSystem, path: &Path) -> Result<(), ApplicationError> {
-    if filesystem.exists(path) {
-        filesystem.remove_file(path).map_err(internal_io)?;
-    }
-    Ok(())
 }
 
 #[allow(

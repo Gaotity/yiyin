@@ -1,99 +1,15 @@
-use std::{
-    fs, io,
-    path::{Path, PathBuf},
-    sync::{Arc, Mutex},
-};
+#[path = "support/faulty_filesystem.rs"]
+mod faulty_filesystem;
 
+use std::{fs, path::PathBuf, sync::Arc};
+
+use faulty_filesystem::{FaultPoint, FaultyFileSystem};
 use tempfile::TempDir;
 use yiyin_application::{ConfigRepository, ErrorCode};
 use yiyin_domain::{
     CaseConversion, Config, FontSpec, OutputDirectory, Quality, Template, TemplateField,
 };
-use yiyin_infrastructure::{DirectoryEntry, FileSystem, JsonConfigRepository, StdFileSystem};
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum FaultPoint {
-    WriteAndSync,
-    Copy,
-    Rename,
-    SyncParent,
-}
-
-#[derive(Clone, Default)]
-struct FaultyFileSystem {
-    inner: StdFileSystem,
-    fault: Arc<Mutex<Option<FaultPoint>>>,
-}
-
-impl FaultyFileSystem {
-    fn fail_once(&self, point: FaultPoint) {
-        *self.fault.lock().expect("fault lock") = Some(point);
-    }
-
-    fn check(&self, point: FaultPoint) -> io::Result<()> {
-        let mut fault = self.fault.lock().expect("fault lock");
-        if fault.as_ref() == Some(&point) {
-            *fault = None;
-            Err(io::Error::other(format!("injected {point:?}")))
-        } else {
-            Ok(())
-        }
-    }
-}
-
-impl FileSystem for FaultyFileSystem {
-    fn exists(&self, path: &Path) -> bool {
-        self.inner.exists(path)
-    }
-
-    fn canonicalize(&self, path: &Path) -> io::Result<PathBuf> {
-        self.inner.canonicalize(path)
-    }
-
-    fn entry_kind(&self, path: &Path) -> io::Result<yiyin_infrastructure::DirectoryEntryKind> {
-        self.inner.entry_kind(path)
-    }
-
-    fn create_dir_all(&self, path: &Path) -> io::Result<()> {
-        self.inner.create_dir_all(path)
-    }
-
-    fn read(&self, path: &Path) -> io::Result<Vec<u8>> {
-        self.inner.read(path)
-    }
-
-    fn write_and_sync(&self, path: &Path, contents: &[u8]) -> io::Result<()> {
-        self.check(FaultPoint::WriteAndSync)?;
-        self.inner.write_and_sync(path, contents)
-    }
-
-    fn copy(&self, from: &Path, to: &Path) -> io::Result<u64> {
-        self.check(FaultPoint::Copy)?;
-        self.inner.copy(from, to)
-    }
-
-    fn rename(&self, from: &Path, to: &Path) -> io::Result<()> {
-        self.check(FaultPoint::Rename)?;
-        self.inner.rename(from, to)
-    }
-
-    fn remove_file(&self, path: &Path) -> io::Result<()> {
-        self.inner.remove_file(path)
-    }
-
-    fn remove_dir_all(&self, path: &Path) -> io::Result<()> {
-        self.inner.remove_dir_all(path)
-    }
-
-    fn read_dir(&self, path: &Path) -> io::Result<Vec<DirectoryEntry>> {
-        self.inner.read_dir(path)
-    }
-
-    fn sync_parent(&self, path: &Path) -> io::Result<()> {
-        self.check(FaultPoint::SyncParent)?;
-        self.inner.sync_parent(path)
-    }
-}
+use yiyin_infrastructure::JsonConfigRepository;
 
 struct Harness {
     _temp: TempDir,
@@ -248,7 +164,7 @@ fn future_schema_is_rejected_without_interpretation() {
 }
 
 #[test]
-fn every_failed_atomic_write_stage_keeps_the_prior_config_loadable() {
+fn every_failed_durable_publish_stage_keeps_the_prior_config_loadable() {
     for fault in [
         FaultPoint::WriteAndSync,
         FaultPoint::Copy,

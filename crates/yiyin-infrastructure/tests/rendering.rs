@@ -26,14 +26,14 @@ impl CancellationProbe for AlwaysCancelled {
     }
 }
 
-/// Cancels once the deterministic preview file exists, which happens right
-/// after the atomic publish rename — modelling a preview that is superseded
-/// between publishing its file and registering its resource record.
-struct CancelOncePublished {
+/// Cancels once the watched path exists, modelling a task superseded at a
+/// specific point of the publish sequence (after the write for the
+/// temporary, after the rename for the destination).
+struct CancelOnceExists {
     path: PathBuf,
 }
 
-impl CancellationProbe for CancelOncePublished {
+impl CancellationProbe for CancelOnceExists {
     fn is_cancelled(&self) -> bool {
         self.path.exists()
     }
@@ -224,7 +224,7 @@ fn a_superseded_preview_never_registers_a_record() {
         .path()
         .join("preview")
         .join(format!("{}.jpg", request.task_id().as_str()));
-    let probe = CancelOncePublished {
+    let probe = CancelOnceExists {
         path: destination.clone(),
     };
 
@@ -329,4 +329,30 @@ fn cancellation_and_existing_outputs_never_publish_partial_bytes() {
         fs::read(output).expect("prior output remains"),
         b"successful prior output"
     );
+}
+
+#[test]
+fn cancellation_between_the_write_and_the_rename_publishes_nothing() {
+    let harness = Harness::new();
+    let request = harness.request("landscape-default.jpg", false);
+    let output = harness
+        .temp
+        .path()
+        .join("output")
+        .join(request.output_name());
+    // The temporary appears right after write_and_sync and disappears into
+    // the rename, so tripping on its existence cancels inside that window.
+    let temporary = PathBuf::from(format!("{}.tmp", output.display()));
+    let probe = CancelOnceExists {
+        path: temporary.clone(),
+    };
+
+    let error = harness
+        .renderer
+        .render(&request, &probe, &mut |_| {})
+        .unwrap_err();
+
+    assert_eq!(error.code(), ErrorCode::Cancelled);
+    assert!(!output.exists());
+    assert!(!temporary.exists());
 }

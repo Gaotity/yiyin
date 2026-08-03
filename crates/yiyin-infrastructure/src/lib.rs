@@ -3,6 +3,8 @@
 //! Outbound adapters for persistence, resources, metadata, rendering, and tasks.
 
 mod config;
+#[doc(hidden)]
+pub mod durable;
 mod filesystem;
 mod metadata;
 mod rendering;

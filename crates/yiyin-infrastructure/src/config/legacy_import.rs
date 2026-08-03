@@ -11,9 +11,7 @@ use crate::{DirectoryEntryKind, FileSystem};
 
 use super::{
     JsonConfigRepository,
-    json_repository::{
-        DecodedLegacyConfig, LegacyImageReference, atomic_write, decode_legacy_config,
-    },
+    json_repository::{DecodedLegacyConfig, LegacyImageReference, decode_legacy_config},
 };
 
 const COMPLETED_SCHEMA_VERSION: u32 = 1;
@@ -215,9 +213,13 @@ fn write_marker(
     };
     let contents = serde_json::to_vec_pretty(&marker)
         .map_err(|error| ApplicationError::internal(error.to_string()))?;
-    atomic_write(filesystem, marker_path, &contents, |prior| {
-        serde_json::from_slice::<MigrationMarker>(prior).is_ok()
-    })
+    crate::durable::durable_publish(
+        filesystem,
+        marker_path,
+        &contents,
+        Some(&|prior| serde_json::from_slice::<MigrationMarker>(prior).is_ok()),
+        None,
+    )
 }
 
 fn fingerprint(path: &Path) -> String {
