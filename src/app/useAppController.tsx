@@ -195,7 +195,11 @@ export function useAppController(client: PlatformClient) {
     void configSignature
     previewTimer.current = window.setTimeout(() => {
       previewTimer.current = null
-      void previewTask(selectedTaskId)
+      // previewTask swallows stale rejections internally; a rejection that
+      // reaches this catch is current and must surface in the task banner.
+      previewTask(selectedTaskId).catch((error: unknown) => {
+        dispatch({ type: 'drop-error', error: parseCommandError(error) })
+      })
     }, PREVIEW_DEBOUNCE_MS)
     return clearPreviewTimer
   }, [
