@@ -84,22 +84,18 @@ fn bootstrap_dto_serializes_numeric_constraints_with_camel_case_keys() {
 }
 
 #[test]
-fn drag_drop_notification_reuses_the_path_free_task_status_contract() {
-    let task = dto_under_test::TaskDescriptorDto {
-        id: "opaque-task-id".to_owned(),
-        display_name: "input.jpg".to_owned(),
-        state: dto_under_test::TaskStateDto::Registered,
-        progress: 0,
-        preview: false,
-        resource: None,
-    };
+fn task_status_events_carry_only_the_path_free_wire_contract() {
+    let status = yiyin_domain::TaskStatus::registered(
+        yiyin_domain::TaskId::try_from("opaque-task-id").expect("task id"),
+    );
 
-    let event = dto_under_test::TaskStatusEventDto::from(&task);
+    let event = dto_under_test::TaskStatusEventDto::from(status);
     let serialized = serde_json::to_string(&event).expect("serialize task status event");
 
     assert_eq!(event.task_id, "opaque-task-id");
     assert_eq!(event.state, dto_under_test::TaskStateDto::Registered);
+    assert_eq!(event.progress, 0);
+    assert!(!event.preview);
     assert_eq!(event.cancellation_reason, None);
-    assert!(!serialized.contains("input.jpg"));
     assert!(!serialized.contains('/'));
 }

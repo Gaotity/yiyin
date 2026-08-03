@@ -608,6 +608,48 @@ fn registering_images_creates_safe_registered_tasks() {
 }
 
 #[test]
+fn registering_images_returns_only_the_newly_registered_tasks() {
+    let queue = Arc::new(FakeQueue::default());
+    queue
+        .register(RegisteredTask::new(
+            TaskId::try_from("task-earlier").expect("task id"),
+            ResourceId::try_from("resource-earlier").expect("resource id"),
+            "earlier.jpg",
+            ImageDimensions::new(100, 80).expect("dimensions"),
+            None,
+        ))
+        .expect("pre-register task");
+
+    let snapshots = RegisterImages::new(
+        Arc::new(FakeResources::default()),
+        Arc::new(FakeIds::default()),
+        queue.clone(),
+    )
+    .execute(&[PathBuf::from("photo.jpg"), PathBuf::from("second.jpg")])
+    .expect("register images");
+
+    let names = snapshots
+        .iter()
+        .map(TaskSnapshot::display_name)
+        .collect::<Vec<_>>();
+    assert_eq!(names, ["photo.jpg", "second.jpg"]);
+    assert_eq!(queue.snapshot().len(), 3);
+}
+
+#[test]
+fn registering_an_empty_selection_is_rejected() {
+    let error = RegisterImages::new(
+        Arc::new(FakeResources::default()),
+        Arc::new(FakeIds::default()),
+        Arc::new(FakeQueue::default()),
+    )
+    .execute(&[])
+    .unwrap_err();
+
+    assert_eq!(error.code(), ErrorCode::InvalidRequest);
+}
+
+#[test]
 fn font_registration_reports_duplicate_and_missing_source_explicitly() {
     let resources = Arc::new(FakeResources::default());
     resources.push(ResourceRecord::new(

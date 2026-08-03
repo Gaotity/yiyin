@@ -30,7 +30,8 @@ impl RegisterImages {
         }
     }
 
-    /// Registers verified inputs as product tasks.
+    /// Registers verified inputs as product tasks and returns the new tasks in
+    /// registration order.
     ///
     /// # Errors
     ///
@@ -43,6 +44,7 @@ impl RegisterImages {
             ));
         }
 
+        let mut registered = Vec::with_capacity(sources.len());
         for source in sources {
             let record = self.resources.register_input(source)?;
             if record.kind() != ResourceKind::Input {
@@ -51,16 +53,18 @@ impl RegisterImages {
             let dimensions = record
                 .dimensions()
                 .ok_or_else(ApplicationError::file_invalid)?;
-            self.tasks.register(RegisteredTask::new(
+            let task = RegisteredTask::new(
                 self.ids.next_task_id(),
                 record.id().clone(),
                 record.display_name(),
                 dimensions,
                 record.density(),
-            ))?;
+            );
+            self.tasks.register(task.clone())?;
+            registered.push(TaskSnapshot::from_registered(&task));
         }
 
-        Ok(self.tasks.snapshot())
+        Ok(registered)
     }
 }
 
