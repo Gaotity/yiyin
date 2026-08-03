@@ -4,7 +4,7 @@
     reason = "Tauri commands use framework-owned extractors and map application errors"
 )]
 
-use std::{collections::BTreeSet, path::PathBuf};
+use std::path::PathBuf;
 
 use tauri::{AppHandle, State, Wry};
 use tauri_plugin_dialog::DialogExt;
@@ -53,21 +53,11 @@ pub(crate) fn register_image_paths(
     state: &AppState,
     paths: &[PathBuf],
 ) -> CommandResult<Vec<TaskDescriptorDto>> {
-    let existing = state
-        .tasks
-        .snapshot()
-        .into_iter()
-        .map(|task| task.id().as_str().to_owned())
-        .collect::<BTreeSet<_>>();
-    let snapshots = state.register_images.execute(paths)?;
-    let new_ids = snapshots
+    let new_tasks = state.register_images.execute(paths)?;
+    let new_ids = new_tasks
         .iter()
-        .filter(|task| !existing.contains(task.id().as_str()))
-        .map(|task| TaskId::try_from(task.id().as_str()))
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|_| {
-            yiyin_application::ApplicationError::internal("registered task id became invalid")
-        })?;
+        .map(|task| task.id().clone())
+        .collect::<Vec<_>>();
     state.start_tasks.execute_quick_output(&new_ids)?;
     Ok(task_dtos(state))
 }

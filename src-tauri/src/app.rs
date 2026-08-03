@@ -1,11 +1,6 @@
-use std::collections::BTreeSet;
-
 use tauri::{DragDropEvent, Emitter, Manager, RunEvent, Wry};
 
-use crate::{
-    commands, dto::TaskStatusEventDto, events::TASK_STATUS_EVENT, protocol::ResourceProtocol,
-    state::AppState,
-};
+use crate::{commands, protocol::ResourceProtocol, state::AppState};
 
 const DROP_ERROR_EVENT: &str = "drop-error";
 
@@ -81,36 +76,12 @@ pub fn builder() -> tauri::Builder<Wry> {
                         let paths = paths.clone();
                         tauri::async_runtime::spawn_blocking(move || {
                             let state = handle.state::<AppState>();
-                            let existing = state
-                                .tasks
-                                .snapshot()
-                                .into_iter()
-                                .map(|task| task.id().as_str().to_owned())
-                                .collect::<BTreeSet<_>>();
-                            match commands::resources::register_image_paths(&state, &paths) {
-                                Ok(tasks) => {
-                                    for task in
-                                        tasks.iter().filter(|task| !existing.contains(&task.id))
-                                    {
-                                        if let Err(error) = handle
-                                            .emit(TASK_STATUS_EVENT, TaskStatusEventDto::from(task))
-                                        {
-                                            log::error!(
-                                                "failed to emit drag-and-drop task status: {error}"
-                                            );
-                                        }
-                                    }
-                                }
-                                Err(error) => {
-                                    log::warn!(
-                                        "drag-and-drop registration failed: {}",
-                                        error.message
-                                    );
-                                    if let Err(emit_error) = handle.emit(DROP_ERROR_EVENT, error) {
-                                        log::error!(
-                                            "failed to emit drag-and-drop error: {emit_error}"
-                                        );
-                                    }
+                            if let Err(error) =
+                                commands::resources::register_image_paths(&state, &paths)
+                            {
+                                log::warn!("drag-and-drop registration failed: {}", error.message);
+                                if let Err(emit_error) = handle.emit(DROP_ERROR_EVENT, error) {
+                                    log::error!("failed to emit drag-and-drop error: {emit_error}");
                                 }
                             }
                         });

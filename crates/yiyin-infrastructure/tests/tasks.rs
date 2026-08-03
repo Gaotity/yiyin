@@ -285,6 +285,20 @@ fn registered_tasks_stay_idle_and_exports_run_with_exactly_two_workers() {
 }
 
 #[test]
+fn registration_publishes_the_initial_status_through_the_sink() {
+    let mut harness = Harness::new(true);
+    let id = harness.register("announced");
+
+    let events = harness.events.for_task(&id);
+    assert_eq!(events.len(), 1);
+    assert_eq!(
+        events.first().expect("registration event").state(),
+        TaskState::Registered
+    );
+    harness.queue.shutdown().expect("shutdown");
+}
+
+#[test]
 fn progress_is_monotonic_and_completion_contains_the_output_resource() {
     let mut harness = Harness::new(true);
     let id = harness.register("progress");
