@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { parseCommandError, type PlatformClient } from '../../platform/client'
 import type {
   CommandErrorDto,
@@ -18,9 +18,7 @@ interface TaskWorkspaceProps {
   onSelect(id: string): void
   onChooseImages(): Promise<void>
   onStartTasks(): Promise<void>
-  onPreviewTask(id: string): Promise<void>
   onCancelTask(id: string): Promise<void>
-  onInvalidatePreview(): void
   onChooseOutput(): Promise<void>
   onOpenOutput(): Promise<void>
   onClear(): Promise<void>
@@ -37,9 +35,7 @@ export function TaskWorkspace({
   onSelect,
   onChooseImages,
   onStartTasks,
-  onPreviewTask,
   onCancelTask,
-  onInvalidatePreview,
   onChooseOutput,
   onOpenOutput,
   onClear,
@@ -47,7 +43,6 @@ export function TaskWorkspace({
   onOpenTemplates,
 }: TaskWorkspaceProps) {
   const [error, setError] = useState<string | null>(null)
-  const previewTimer = useRef<number | null>(null)
   const selectedTask = useMemo(
     () => tasks.find((task) => task.id === selectedId) ?? null,
     [selectedId, tasks],
@@ -66,42 +61,9 @@ export function TaskWorkspace({
     },
     [showError],
   )
-  const clearPreviewTimer = useCallback(() => {
-    if (previewTimer.current !== null) {
-      window.clearTimeout(previewTimer.current)
-      previewTimer.current = null
-    }
-  }, [])
-  const previewEnabled = config.options.previewVisible
-  const previewConfiguration = JSON.stringify(config)
-
-  useEffect(() => {
-    clearPreviewTimer()
-    if (!previewEnabled || !selectedId) {
-      onInvalidatePreview()
-      return
-    }
-    void previewConfiguration
-    previewTimer.current = window.setTimeout(() => {
-      previewTimer.current = null
-      void run(() => onPreviewTask(selectedId))
-    }, 300)
-    return clearPreviewTimer
-  }, [
-    clearPreviewTimer,
-    onInvalidatePreview,
-    onPreviewTask,
-    previewConfiguration,
-    previewEnabled,
-    run,
-    selectedId,
-  ])
-
   const startOutput = useCallback(async () => {
-    clearPreviewTimer()
-    onInvalidatePreview()
     await run(onStartTasks)
-  }, [clearPreviewTimer, onInvalidatePreview, onStartTasks, run])
+  }, [onStartTasks, run])
 
   return (
     <div className="task-workspace">

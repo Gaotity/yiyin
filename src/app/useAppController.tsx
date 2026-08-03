@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react'
 import { parseCommandError, type PlatformClient } from '../platform/client'
 import type {
   BootstrapDto,
@@ -8,6 +8,8 @@ import type {
   TaskDescriptorDto,
   TaskStatusEventDto,
 } from '../platform/types'
+
+const PREVIEW_DEBOUNCE_MS = 300
 
 type Phase = 'loading' | 'ready' | 'error'
 
@@ -45,6 +47,7 @@ const initialState: AppState = {
 export function useAppController(client: PlatformClient) {
   const [state, dispatch] = useReducer(reducer, initialState)
   const previewRequest = useRef(0)
+  const previewTimer = useRef<number | null>(null)
 
   const load = useCallback(async () => {
     try {
@@ -120,18 +123,6 @@ export function useAppController(client: PlatformClient) {
     replaceTasks(await client.chooseImages())
   }, [client, replaceTasks])
 
-  const startTasks = useCallback(async () => {
-    const tasks = state.snapshot?.tasks ?? []
-    const selected = state.selectedTaskId
-    const ids = selected
-      ? [
-          selected,
-          ...tasks.filter((task) => task.id !== selected).map(({ id }) => id),
-        ]
-      : tasks.map(({ id }) => id)
-    replaceTasks(await client.startTasks(ids))
-  }, [client, replaceTasks, state.selectedTaskId, state.snapshot?.tasks])
-
   const previewTask = useCallback(
     async (id: string) => {
       const request = ++previewRequest.current
@@ -153,10 +144,72 @@ export function useAppController(client: PlatformClient) {
     previewRequest.current += 1
   }, [])
 
+  const clearPreviewTimer = useCallback(() => {
+    if (previewTimer.current !== null) {
+      window.clearTimeout(previewTimer.current)
+      previewTimer.current = null
+    }
+  }, [])
+
+  const startTasks = useCallback(async () => {
+    clearPreviewTimer()
+    invalidatePreviewRequests()
+    const tasks = state.snapshot?.tasks ?? []
+    const selected = state.selectedTaskId
+    const ids = selected
+      ? [
+          selected,
+          ...tasks.filter((task) => task.id !== selected).map(({ id }) => id),
+        ]
+      : tasks.map(({ id }) => id)
+    replaceTasks(await client.startTasks(ids))
+  }, [
+    clearPreviewTimer,
+    client,
+    invalidatePreviewRequests,
+    replaceTasks,
+    state.selectedTaskId,
+    state.snapshot?.tasks,
+  ])
+
   const clearTasks = useCallback(async () => {
     invalidatePreviewRequests()
     replaceTasks(await client.clearTasks())
   }, [client, invalidatePreviewRequests, replaceTasks])
+
+  const previewEnabled = state.snapshot?.config.options.previewVisible
+  // Detect config changes by value rather than by reference: an equivalent
+  // bootstrap refresh yields a new config object with identical content and
+  // must not re-trigger a preview, so reference equality would misfire here.
+  const configSignature = useMemo(
+    () => JSON.stringify(state.snapshot?.config),
+    [state.snapshot?.config],
+  )
+
+  useEffect(() => {
+    const selectedTaskId = state.selectedTaskId
+    if (!previewEnabled || !selectedTaskId) {
+      invalidatePreviewRequests()
+      return
+    }
+    void configSignature
+    previewTimer.current = window.setTimeout(() => {
+      previewTimer.current = null
+      // previewTask swallows stale rejections internally; a rejection that
+      // reaches this catch is current and must surface in the task banner.
+      previewTask(selectedTaskId).catch((error: unknown) => {
+        dispatch({ type: 'drop-error', error: parseCommandError(error) })
+      })
+    }, PREVIEW_DEBOUNCE_MS)
+    return clearPreviewTimer
+  }, [
+    clearPreviewTimer,
+    configSignature,
+    invalidatePreviewRequests,
+    previewEnabled,
+    previewTask,
+    state.selectedTaskId,
+  ])
 
   const cancelTask = useCallback(
     async (id: string) => {
@@ -221,8 +274,6 @@ export function useAppController(client: PlatformClient) {
     selectTask,
     chooseImages,
     startTasks,
-    previewTask,
-    invalidatePreviewRequests,
     clearTasks,
     cancelTask,
     chooseOutputDirectory,
