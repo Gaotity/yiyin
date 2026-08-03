@@ -459,4 +459,34 @@ describe('preview reconciliation', () => {
     })
     expect(screen.getByText('预览图生成失败')).toBeTruthy()
   })
+
+  it('previews the current selection once when a config option changes', async () => {
+    const existing = task('task-one', 'one.jpg')
+    const fake = createFakePlatformClient({
+      snapshot: defaultBootstrap({ tasks: [existing] }),
+    })
+    const previewTask = vi
+      .spyOn(fake.client, 'previewTask')
+      .mockResolvedValue([existing])
+    render(<App client={fake.client} />)
+    await screen.findByRole('switch', { name: '实时预览' })
+    vi.useFakeTimers()
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('switch', { name: '实时预览' }))
+      await Promise.resolve()
+    })
+    await vi.advanceTimersByTimeAsync(300)
+    expect(previewTask).toHaveBeenCalledTimes(1)
+    previewTask.mockClear()
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('switch', { name: '纯色背景' }))
+      await Promise.resolve()
+    })
+    await vi.advanceTimersByTimeAsync(300)
+
+    expect(previewTask).toHaveBeenCalledTimes(1)
+    expect(previewTask).toHaveBeenLastCalledWith(existing.id)
+  })
 })
