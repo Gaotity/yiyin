@@ -1,5 +1,6 @@
 //! A `FileSystem` decorator that injects one failure at a chosen stage of the
-//! durable publish sequence, shared by the persistence fault-injection suites.
+//! durable publish sequence, or fails the `read` of one chosen path, shared by
+//! the persistence fault-injection suites.
 
 #![allow(
     dead_code,
@@ -14,12 +15,14 @@ use std::{
 
 use yiyin_infrastructure::{DirectoryEntry, FileSystem, StdFileSystem};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum FaultPoint {
     WriteAndSync,
     Copy,
     Rename,
     SyncParent,
+    /// Fails the next `read` of exactly this path.
+    Read(PathBuf),
 }
 
 #[derive(Clone, Default)]
@@ -33,9 +36,9 @@ impl FaultyFileSystem {
         *self.fault.lock().expect("fault lock") = Some(point);
     }
 
-    fn check(&self, point: FaultPoint) -> io::Result<()> {
+    fn check(&self, point: &FaultPoint) -> io::Result<()> {
         let mut fault = self.fault.lock().expect("fault lock");
-        if fault.as_ref() == Some(&point) {
+        if fault.as_ref() == Some(point) {
             *fault = None;
             Err(io::Error::other(format!("injected {point:?}")))
         } else {
@@ -62,21 +65,22 @@ impl FileSystem for FaultyFileSystem {
     }
 
     fn read(&self, path: &Path) -> io::Result<Vec<u8>> {
+        self.check(&FaultPoint::Read(path.to_path_buf()))?;
         self.inner.read(path)
     }
 
     fn write_and_sync(&self, path: &Path, contents: &[u8]) -> io::Result<()> {
-        self.check(FaultPoint::WriteAndSync)?;
+        self.check(&FaultPoint::WriteAndSync)?;
         self.inner.write_and_sync(path, contents)
     }
 
     fn copy(&self, from: &Path, to: &Path) -> io::Result<u64> {
-        self.check(FaultPoint::Copy)?;
+        self.check(&FaultPoint::Copy)?;
         self.inner.copy(from, to)
     }
 
     fn rename(&self, from: &Path, to: &Path) -> io::Result<()> {
-        self.check(FaultPoint::Rename)?;
+        self.check(&FaultPoint::Rename)?;
         self.inner.rename(from, to)
     }
 
@@ -93,7 +97,7 @@ impl FileSystem for FaultyFileSystem {
     }
 
     fn sync_parent(&self, path: &Path) -> io::Result<()> {
-        self.check(FaultPoint::SyncParent)?;
+        self.check(&FaultPoint::SyncParent)?;
         self.inner.sync_parent(path)
     }
 }
