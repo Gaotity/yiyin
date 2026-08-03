@@ -148,6 +148,29 @@ fn invalid_json_is_preserved_before_defaults_are_recovered() {
 }
 
 #[test]
+fn a_contradictory_backup_recovers_with_landscape_forced_off() {
+    let harness = Harness::new();
+    let mut contradictory = Config::default();
+    contradictory.options.landscape = true;
+    contradictory.options.background_ratio_visible = true;
+    harness
+        .repository()
+        .store(&contradictory)
+        .expect("store contradictory config");
+    let backup_path = PathBuf::from(format!("{}.bak", harness.config_path.display()));
+    fs::copy(&harness.config_path, &backup_path).expect("seed a pre-rule backup");
+    fs::write(&harness.config_path, b"{ definitely not json").expect("corrupt config");
+
+    let recovered = harness.repository().load().expect("recover config");
+
+    assert!(recovered.options.background_ratio_visible);
+    assert!(!recovered.options.landscape);
+    let reloaded = harness.reload();
+    assert!(reloaded.options.background_ratio_visible);
+    assert!(!reloaded.options.landscape);
+}
+
+#[test]
 fn future_schema_is_rejected_without_interpretation() {
     let harness = Harness::new();
     fs::create_dir_all(harness.config_path.parent().expect("config parent"))

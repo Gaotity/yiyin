@@ -66,7 +66,7 @@ impl JsonConfigRepository {
             .map_err(internal_io)?;
 
         let backup = crate::durable::with_suffix(&self.path, ".bak");
-        let recovered = if self.filesystem.exists(&backup) {
+        let mut recovered = if self.filesystem.exists(&backup) {
             self.filesystem
                 .read(&backup)
                 .ok()
@@ -75,6 +75,7 @@ impl JsonConfigRepository {
         } else {
             Config::default()
         };
+        recovered.normalize();
         self.store(&recovered)?;
         Ok(recovered)
     }

@@ -478,6 +478,44 @@ fn update_config_leaves_text_fields_with_custom_values_untouched() {
 }
 
 #[test]
+fn update_config_normalizes_the_ratio_guide_landscape_coupling() {
+    let repository = Arc::new(FakeConfig::default());
+    let mut config = Config::default();
+    config.options.landscape = true;
+    config.options.background_ratio_visible = true;
+
+    let stored = UpdateConfig::new(repository.clone(), Arc::new(FakeResources::default()))
+        .execute(config)
+        .expect("the contradictory combination is normalized, not rejected");
+
+    assert!(stored.options.background_ratio_visible);
+    assert!(!stored.options.landscape);
+    let persisted = repository.load().expect("load persisted config");
+    assert!(persisted.options.background_ratio_visible);
+    assert!(!persisted.options.landscape);
+}
+
+#[test]
+fn update_config_keeps_landscape_when_the_ratio_guide_is_off() {
+    let repository = Arc::new(FakeConfig::default());
+    let mut config = Config::default();
+    config.options.landscape = true;
+
+    let stored = UpdateConfig::new(repository.clone(), Arc::new(FakeResources::default()))
+        .execute(config)
+        .expect("landscape is valid while the ratio guide is off");
+
+    assert!(stored.options.landscape);
+    assert!(
+        repository
+            .load()
+            .expect("load persisted config")
+            .options
+            .landscape
+    );
+}
+
+#[test]
 fn reset_config_persists_the_complete_default_model() {
     let repository = Arc::new(FakeConfig::default());
     let config = ResetConfig::new(repository.clone())
@@ -502,6 +540,24 @@ fn set_output_directory_probes_persists_then_swaps() {
     assert_eq!(config.output.as_str(), "/chosen/output");
     assert_eq!(repository.stored_output(), "/chosen/output");
     assert_eq!(output.changes(), ["/chosen/output"]);
+}
+
+#[test]
+fn set_output_directory_normalizes_a_contradictory_loaded_config() {
+    let repository = Arc::new(FakeConfig::default());
+    let mut stale = repository.load().expect("load config");
+    stale.options.landscape = true;
+    stale.options.background_ratio_visible = true;
+    repository
+        .store(&stale)
+        .expect("store a pre-normalization config");
+
+    let config = SetOutputDirectory::new(repository.clone(), Arc::new(FakeOutput::default()))
+        .execute(OutputDirectory::try_from("/chosen/output").expect("output directory"))
+        .expect("set output directory");
+
+    assert!(!config.options.landscape);
+    assert!(!repository.load().expect("load config").options.landscape);
 }
 
 #[test]

@@ -119,6 +119,7 @@ pub(super) fn import_if_needed(
         .rename(&staged_resources, &options.owned_resources_root)
         .map_err(internal_io)?;
 
+    config.normalize();
     repository.store(&config)?;
     write_marker(repository.filesystem(), &marker_path, source)?;
     if repository.filesystem().exists(&staging) {

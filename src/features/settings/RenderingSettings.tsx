@@ -4,8 +4,21 @@ import type {
   BootstrapDto,
   NumericConstraintDto,
   PublicConfigDto,
-  RenderOptionsDto,
 } from '../../platform/types'
+import {
+  setBackgroundRatioHeight,
+  setBackgroundRatioVisible,
+  setBackgroundRatioWidth,
+  setLandscape,
+  setNumberOption,
+  setPreviewVisible,
+  setQuickOutput,
+  setRadiusVisible,
+  setShadowVisible,
+  setSolidBackground,
+  setSolidColor,
+  swapBackgroundRatio,
+} from './configIntents'
 
 interface RenderingSettingsProps {
   config: PublicConfigDto
@@ -104,14 +117,6 @@ export function RenderingSettings({
     }
   }
 
-  const updateOptions = (
-    change: (options: RenderOptionsDto) => void,
-  ): PublicConfigDto => {
-    const next = structuredClone(draft)
-    change(next.options)
-    return next
-  }
-
   const saveNumber = (setting: NumberSetting, raw: string) => {
     const constraint = constraints[setting.key] ?? UNBOUNDED
     const value = canonicalNumber(
@@ -120,11 +125,7 @@ export function RenderingSettings({
       constraint.maximum,
       constraint.decimals,
     )
-    void commit(
-      updateOptions((options) => {
-        ;(options[setting.key] as number) = value
-      }),
-    )
+    void commit(setNumberOption(draft, setting.key, value))
   }
 
   const scheduleBlur = (raw: string) => {
@@ -134,9 +135,7 @@ export function RenderingSettings({
       blurConstraint.maximum,
       blurConstraint.decimals,
     )
-    const next = updateOptions((options) => {
-      options.backgroundBlur = value
-    })
+    const next = setNumberOption(draft, 'backgroundBlur', value)
     setDraft(next)
     pendingBlur.current = next
     if (blurTimer.current !== null) {
@@ -172,11 +171,7 @@ export function RenderingSettings({
             <Switch
               checked={draft.options.radiusVisible}
               onCheckedChange={(checked) =>
-                void commit(
-                  updateOptions((options) => {
-                    options.radiusVisible = checked
-                  }),
-                )
+                void commit(setRadiusVisible(draft, checked))
               }
               label="启用圆角"
             />
@@ -185,11 +180,7 @@ export function RenderingSettings({
             <Switch
               checked={draft.options.shadowVisible}
               onCheckedChange={(checked) =>
-                void commit(
-                  updateOptions((options) => {
-                    options.shadowVisible = checked
-                  }),
-                )
+                void commit(setShadowVisible(draft, checked))
               }
               label="启用阴影"
             />
@@ -224,14 +215,7 @@ export function RenderingSettings({
         <Switch
           checked={draft.options.backgroundRatioVisible}
           onCheckedChange={(checked) =>
-            void commit(
-              updateOptions((options) => {
-                options.backgroundRatioVisible = checked
-                if (checked) {
-                  options.landscape = false
-                }
-              }),
-            )
+            void commit(setBackgroundRatioVisible(draft, checked))
           }
           label="输出宽高比"
         />
@@ -241,29 +225,17 @@ export function RenderingSettings({
           value={draft.options.backgroundRatio.width}
           onCommit={(value) =>
             void commit(
-              updateOptions((options) => {
-                options.backgroundRatio.width = canonicalNumber(
-                  value,
-                  0,
-                  Number.MAX_SAFE_INTEGER,
-                  3,
-                )
-              }),
+              setBackgroundRatioWidth(
+                draft,
+                canonicalNumber(value, 0, Number.MAX_SAFE_INTEGER, 3),
+              ),
             )
           }
         />
         <button
           type="button"
           aria-label="交换宽高比"
-          onClick={() =>
-            void commit(
-              updateOptions((options) => {
-                const width = options.backgroundRatio.width
-                options.backgroundRatio.width = options.backgroundRatio.height
-                options.backgroundRatio.height = width
-              }),
-            )
-          }
+          onClick={() => void commit(swapBackgroundRatio(draft))}
         >
           ⇄
         </button>
@@ -273,14 +245,10 @@ export function RenderingSettings({
           value={draft.options.backgroundRatio.height}
           onCommit={(value) =>
             void commit(
-              updateOptions((options) => {
-                options.backgroundRatio.height = canonicalNumber(
-                  value,
-                  0,
-                  Number.MAX_SAFE_INTEGER,
-                  3,
-                )
-              }),
+              setBackgroundRatioHeight(
+                draft,
+                canonicalNumber(value, 0, Number.MAX_SAFE_INTEGER, 3),
+              ),
             )
           }
         />
@@ -290,13 +258,7 @@ export function RenderingSettings({
         label="纯色背景"
         help="使用纯色背景，默认使用图片模糊做背景"
         checked={draft.options.solidBackground}
-        onChange={(checked) =>
-          void commit(
-            updateOptions((options) => {
-              options.solidBackground = checked
-            }),
-          )
-        }
+        onChange={(checked) => void commit(setSolidBackground(draft, checked))}
       >
         {draft.options.solidBackground && (
           <input
@@ -304,11 +266,7 @@ export function RenderingSettings({
             type="color"
             value={expandColor(draft.options.solidColor)}
             onChange={(event) =>
-              void commit(
-                updateOptions((options) => {
-                  options.solidColor = event.currentTarget.value
-                }),
-              )
+              void commit(setSolidColor(draft, event.currentTarget.value))
             }
           />
         )}
@@ -320,37 +278,19 @@ export function RenderingSettings({
         }
         checked={draft.options.landscape}
         disabled={draft.options.backgroundRatioVisible}
-        onChange={(checked) =>
-          void commit(
-            updateOptions((options) => {
-              options.landscape = checked
-            }),
-          )
-        }
+        onChange={(checked) => void commit(setLandscape(draft, checked))}
       />
       <BooleanSetting
         label="快速输出"
         help="开启后选择图片/拖拽图片到软件将直接输出水印图片无需点击生成按钮"
         checked={draft.options.quickOutput}
-        onChange={(checked) =>
-          void commit(
-            updateOptions((options) => {
-              options.quickOutput = checked
-            }),
-          )
-        }
+        onChange={(checked) => void commit(setQuickOutput(draft, checked))}
       />
       <BooleanSetting
         label="实时预览"
         help="开启后点击列表图片可实时预览水印效果"
         checked={draft.options.previewVisible}
-        onChange={(checked) =>
-          void commit(
-            updateOptions((options) => {
-              options.previewVisible = checked
-            }),
-          )
-        }
+        onChange={(checked) => void commit(setPreviewVisible(draft, checked))}
       />
       {error && <p role="alert">{error}</p>}
     </section>

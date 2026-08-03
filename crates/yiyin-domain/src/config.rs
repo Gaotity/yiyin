@@ -335,6 +335,15 @@ impl Config {
         self.templates.remove(index);
         Ok(())
     }
+
+    /// Normalizes coupled options so no write path persists a contradictory
+    /// combination: an active background ratio guide disables landscape
+    /// output (ADR 0005).
+    pub fn normalize(&mut self) {
+        if self.options.background_ratio_visible {
+            self.options.landscape = false;
+        }
+    }
 }
 
 /// The app version stamped into freshly created and freshly loaded
@@ -391,6 +400,21 @@ mod tests {
         assert_eq!(config.options.mini_top_bottom_margin.get(), 0.0);
         assert_eq!(config.options.background_blur.get(), 100);
         assert!(!config.options.preview_visible);
+    }
+
+    #[test]
+    fn normalize_forces_landscape_off_only_while_the_ratio_guide_is_active() {
+        let mut coupled = Config::default();
+        coupled.options.landscape = true;
+        coupled.options.background_ratio_visible = true;
+        coupled.normalize();
+        assert!(coupled.options.background_ratio_visible);
+        assert!(!coupled.options.landscape);
+
+        let mut uncoupled = Config::default();
+        uncoupled.options.landscape = true;
+        uncoupled.normalize();
+        assert!(uncoupled.options.landscape);
     }
 
     #[test]
