@@ -67,27 +67,6 @@ impl RustImageRenderer {
         )
     }
 
-    /// Creates a renderer whose export root can be changed by the native adapter.
-    ///
-    /// # Errors
-    ///
-    /// Returns `INTERNAL` when its roots or deterministic font cannot be read.
-    pub fn with_shared_output_root(
-        resources: Arc<ResourceRegistry>,
-        output_root: Arc<RwLock<PathBuf>>,
-        preview_root: PathBuf,
-        bundled_font: impl AsRef<Path>,
-    ) -> Result<Self, ApplicationError> {
-        let bundled_fonts = [bundled_font.as_ref().to_path_buf()];
-        Self::with_filesystem_and_bundled_fonts(
-            resources,
-            output_root,
-            preview_root,
-            &bundled_fonts,
-            Arc::new(StdFileSystem),
-        )
-    }
-
     /// Creates a renderer with every bundled product font and a shared export root.
     ///
     /// # Errors
@@ -112,24 +91,8 @@ impl RustImageRenderer {
     ///
     /// # Errors
     ///
-    /// Returns `INTERNAL` when its roots or deterministic font cannot be read.
-    pub fn with_filesystem(
-        resources: Arc<ResourceRegistry>,
-        output_root: Arc<RwLock<PathBuf>>,
-        preview_root: PathBuf,
-        bundled_font: &Path,
-        filesystem: Arc<dyn FileSystem>,
-    ) -> Result<Self, ApplicationError> {
-        Self::with_filesystem_and_bundled_fonts(
-            resources,
-            output_root,
-            preview_root,
-            &[bundled_font.to_path_buf()],
-            filesystem,
-        )
-    }
-
-    fn with_filesystem_and_bundled_fonts(
+    /// Returns `INTERNAL` when its roots or bundled fonts cannot be read.
+    pub fn with_filesystem_and_bundled_fonts(
         resources: Arc<ResourceRegistry>,
         output_root: Arc<RwLock<PathBuf>>,
         preview_root: PathBuf,
@@ -223,6 +186,7 @@ impl RustImageRenderer {
             default_family: request.options().font.as_str(),
             bundled_fonts: &self.bundled_fonts,
             resources: self.resources.as_ref(),
+            filesystem: self.filesystem.as_ref(),
         };
         let rendered_rows = text::rasterize_rows(&rows, &text_context, request.text_rows())?;
         let measurements = rendered_rows

@@ -1,10 +1,18 @@
-use std::{fs, path::PathBuf, sync::Arc};
+#[path = "support/faulty_filesystem.rs"]
+mod faulty_filesystem;
 
+use std::{
+    fs,
+    path::PathBuf,
+    sync::{Arc, RwLock},
+};
+
+use faulty_filesystem::{FaultPoint, FaultyFileSystem};
 use yiyin_application::{
-    CancellationProbe, ErrorCode, ImageRenderer, MetadataReader, ResourceRepository,
+    CancellationProbe, ErrorCode, ImageRenderer, MetadataReader, ResourceRecord, ResourceRepository,
 };
 use yiyin_domain::{Config, ImageDimensions, RenderRequest, RenderStage, ResourceKind, TaskId};
-use yiyin_infrastructure::{ExifMetadataReader, ResourceRegistry, RustImageRenderer};
+use yiyin_infrastructure::{ExifMetadataReader, FileSystem, ResourceRegistry, RustImageRenderer};
 
 fn fixtures() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/input")
@@ -65,7 +73,40 @@ impl Harness {
         }
     }
 
+    fn with_filesystem(filesystem: Arc<dyn FileSystem>) -> Self {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let registry = Arc::new(
+            ResourceRegistry::new(temp.path().join("resources")).expect("resource registry"),
+        );
+        let renderer = RustImageRenderer::with_filesystem_and_bundled_fonts(
+            Arc::clone(&registry),
+            Arc::new(RwLock::new(temp.path().join("output"))),
+            temp.path().join("preview"),
+            &[fixtures().join("千图小兔体.ttf")],
+            filesystem,
+        )
+        .expect("renderer");
+        Self {
+            temp,
+            registry,
+            renderer,
+        }
+    }
+
     fn request(&self, fixture: &str, preview: bool) -> RenderRequest {
+        self.request_with(fixture, preview, |config| {
+            for template in &mut config.templates {
+                template.set_enabled(false);
+            }
+        })
+    }
+
+    fn request_with(
+        &self,
+        fixture: &str,
+        preview: bool,
+        configure: impl FnOnce(&mut Config),
+    ) -> RenderRequest {
         let source = fixtures().join(fixture);
         let resource = self
             .registry
@@ -76,9 +117,7 @@ impl Harness {
             .expect("read metadata")
             .unwrap_or_default();
         let mut config = Config::default();
-        for template in &mut config.templates {
-            template.set_enabled(false);
-        }
+        configure(&mut config);
         let request = RenderRequest::freeze(
             TaskId::try_from(fixture).expect("task id"),
             resource.id().clone(),
@@ -97,6 +136,25 @@ impl Harness {
         } else {
             request
         }
+    }
+
+    fn register_logo(&self) -> ResourceRecord {
+        let source = self.temp.path().join("sony-w.png");
+        fs::copy(fixtures().join("sony-w.png"), &source).expect("copy logo");
+        self.registry
+            .register_owned(ResourceKind::Overlay, &source, "Sony light")
+            .expect("register logo")
+    }
+
+    fn logo_request(&self, logo: &ResourceRecord) -> RenderRequest {
+        self.request_with("landscape-default.jpg", false, |config| {
+            config
+                .temp_fields
+                .iter_mut()
+                .find(|field| field.key().as_str() == "Make")
+                .expect("Make field")
+                .set_image_variants(Some(logo.id().clone()), Some(logo.id().clone()));
+        })
     }
 }
 
@@ -355,4 +413,56 @@ fn cancellation_between_the_write_and_the_rename_publishes_nothing() {
     assert_eq!(error.code(), ErrorCode::Cancelled);
     assert!(!output.exists());
     assert!(!temporary.exists());
+}
+
+#[test]
+fn a_font_read_failure_surfaces_as_internal() {
+    let filesystem = FaultyFileSystem::default();
+    let harness = Harness::with_filesystem(Arc::new(filesystem.clone()));
+    let source = harness.temp.path().join("custom-font.ttf");
+    fs::copy(fixtures().join("千图小兔体.ttf"), &source).expect("copy font");
+    let font = harness
+        .registry
+        .register_owned(ResourceKind::Font, &source, "Custom font")
+        .expect("register font");
+    filesystem.fail_once(FaultPoint::Read(font.source().to_path_buf()));
+
+    let request = harness.request("landscape-default.jpg", false);
+    let error = harness
+        .renderer
+        .render(&request, &NeverCancelled, &mut |_| {})
+        .unwrap_err();
+
+    assert_eq!(error.code(), ErrorCode::Internal);
+}
+
+#[test]
+fn a_logo_read_failure_surfaces_as_file_invalid() {
+    let filesystem = FaultyFileSystem::default();
+    let harness = Harness::with_filesystem(Arc::new(filesystem.clone()));
+    let logo = harness.register_logo();
+    filesystem.fail_once(FaultPoint::Read(logo.source().to_path_buf()));
+
+    let request = harness.logo_request(&logo);
+    let error = harness
+        .renderer
+        .render(&request, &NeverCancelled, &mut |_| {})
+        .unwrap_err();
+
+    assert_eq!(error.code(), ErrorCode::FileInvalid);
+}
+
+#[test]
+fn undecodable_logo_bytes_surface_as_file_invalid() {
+    let harness = Harness::new();
+    let logo = harness.register_logo();
+    fs::write(logo.source(), b"these are not image bytes").expect("corrupt logo");
+
+    let request = harness.logo_request(&logo);
+    let error = harness
+        .renderer
+        .render(&request, &NeverCancelled, &mut |_| {})
+        .unwrap_err();
+
+    assert_eq!(error.code(), ErrorCode::FileInvalid);
 }

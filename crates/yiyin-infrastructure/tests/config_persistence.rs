@@ -177,7 +177,7 @@ fn every_failed_durable_publish_stage_keeps_the_prior_config_loadable() {
             .repository()
             .store(&original)
             .expect("store original");
-        harness.filesystem.fail_once(fault);
+        harness.filesystem.fail_once(fault.clone());
 
         assert!(harness.repository().store(&changed_config()).is_err());
         assert_eq!(harness.reload(), original, "fault: {fault:?}");

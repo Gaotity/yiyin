@@ -10,7 +10,7 @@ use yiyin_domain::{
     BackgroundKind, FontSpec, RowSlot, TextMeasurement, TextRowPlan, VerticalAlign,
 };
 
-use crate::ResourceRegistry;
+use crate::{FileSystem, ResourceRegistry};
 
 pub struct RenderedRow {
     pub image: RgbaImage,
@@ -24,6 +24,7 @@ pub struct RasterContext<'a> {
     pub default_family: &'a str,
     pub bundled_fonts: &'a [Vec<u8>],
     pub resources: &'a ResourceRegistry,
+    pub filesystem: &'a dyn FileSystem,
 }
 
 pub fn rasterize_rows(
@@ -36,7 +37,8 @@ pub fn rasterize_rows(
             "forced text measurements do not match planned rows",
         ));
     }
-    let mut fonts = build_font_catalog(context.bundled_fonts, context.resources)?;
+    let mut fonts =
+        build_font_catalog(context.bundled_fonts, context.resources, context.filesystem)?;
     let mut cache = SwashCache::new();
 
     let default_color = match context.background {
@@ -55,6 +57,7 @@ pub fn rasterize_rows(
                 context.default_family,
                 default_color,
                 context.resources,
+                context.filesystem,
                 &fonts.aliases,
                 &mut fonts.system,
                 &mut cache,
@@ -88,6 +91,7 @@ struct FontCatalog {
 fn build_font_catalog(
     bundled_fonts: &[Vec<u8>],
     resources: &ResourceRegistry,
+    filesystem: &dyn FileSystem,
 ) -> Result<FontCatalog, ApplicationError> {
     let mut sources = bundled_fonts
         .iter()
@@ -104,7 +108,8 @@ fn build_font_catalog(
     ]);
     for resource in resources.snapshot() {
         if resource.kind() == yiyin_domain::ResourceKind::Font {
-            let bytes = std::fs::read(resource.source())
+            let bytes = filesystem
+                .read(resource.source())
                 .map_err(|error| ApplicationError::internal(error.to_string()))?;
             if let Some(family) = embedded_family(&bytes) {
                 aliases.insert(resource.display_name().to_owned(), family);
@@ -140,6 +145,7 @@ fn rasterize_row(
     default_family: &str,
     default_color: Rgba<u8>,
     resources: &ResourceRegistry,
+    filesystem: &dyn FileSystem,
     aliases: &HashMap<String, String>,
     font_system: &mut FontSystem,
     cache: &mut SwashCache,
@@ -159,7 +165,10 @@ fn rasterize_row(
             )?),
             RowSlot::Image { resource, font } => {
                 let record = resources.resolve(resource)?;
-                let source = image::open(record.source())
+                let bytes = filesystem
+                    .read(record.source())
+                    .map_err(|_| ApplicationError::file_invalid())?;
+                let source = image::load_from_memory(&bytes)
                     .map_err(|_| ApplicationError::file_invalid())?
                     .to_rgba8();
                 let height = font_pixels(font, background_height).ceil().max(1.0);
@@ -320,6 +329,8 @@ fn checked_dimension(value: f64) -> Result<u32, ApplicationError> {
 
 #[cfg(test)]
 mod tests {
+    use crate::StdFileSystem;
+
     use super::*;
 
     #[test]
@@ -333,7 +344,8 @@ mod tests {
             include_bytes!("../../../../assets/fonts/Neoneon.otf").to_vec(),
         ];
 
-        let catalog = build_font_catalog(&bundled_fonts, &resources).expect("load fonts");
+        let catalog =
+            build_font_catalog(&bundled_fonts, &resources, &StdFileSystem).expect("load fonts");
         let families = catalog
             .system
             .db()
@@ -371,6 +383,7 @@ mod tests {
         let catalog = build_font_catalog(
             &[include_bytes!("../../../../assets/fonts/千图小兔体.ttf").to_vec()],
             &resources,
+            &StdFileSystem,
         )
         .expect("load fonts");
 
