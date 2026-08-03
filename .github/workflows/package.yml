@@ -1,6 +1,7 @@
 name: Native packages
 
 on:
+  merge_group:
   pull_request:
   workflow_dispatch:
 
