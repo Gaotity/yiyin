@@ -1,0 +1,8 @@
+version: 0.1
+merge:
+  required_statuses:
+    - Frontend quality
+    - Rust quality
+    - Security and supply chain
+    - macOS package smoke
+    - Windows package and desktop smoke
