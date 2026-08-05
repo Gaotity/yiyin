@@ -4,5 +4,4 @@ merge:
     - Frontend quality
     - Rust quality
     - Security and supply chain
-    - macOS package smoke
     - Windows package and desktop smoke

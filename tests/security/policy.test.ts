@@ -239,6 +239,13 @@ describe('GitHub automation policy', () => {
     expect(codeql).toContain('javascript-typescript')
     expect(codeql).toContain('rust')
     expect(packaging).toContain('  macos-package-smoke:')
+    const macosPackaging =
+      packaging.match(
+        /  macos-package-smoke:[\s\S]*?(?=\n  windows-package-and-desktop-smoke:)/,
+      )?.[0] ?? ''
+    expect(macosPackaging).toContain(
+      "if: ${{ github.event_name == 'workflow_dispatch' }}",
+    )
     expect(packaging).toContain('  windows-package-and-desktop-smoke:')
     expect([ci, codeql, packaging].join('\n')).toContain('24.x')
     expect([ci, packaging].join('\n')).toContain('pnpm@11.13.0')
@@ -304,7 +311,7 @@ describe('GitHub automation policy', () => {
       packaging.match(
         /if: \$\{\{ !cancelled\(\) && \(needs\['native-changes'\]\.result != 'success' \|\| needs\['native-changes'\]\.outputs\.should_run == 'true'\) \}\}/g,
       )?.length,
-    ).toBe(2)
+    ).toBe(1)
   })
 
   it('uploads only short-lived manual packages and failure diagnostics', () => {
