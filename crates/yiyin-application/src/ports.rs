@@ -133,6 +133,9 @@ pub trait ResourceRepository: Send + Sync {
     fn snapshot(&self) -> Vec<ResourceRecord>;
 }
 
+/// Port contract (ADR 0001): make/model strings cross raw — vendor
+/// normalization happens at render time; numeric and enum fields cross
+/// display-normalized at read time.
 #[allow(
     clippy::missing_errors_doc,
     reason = "adapter implementations define the concrete metadata failures"

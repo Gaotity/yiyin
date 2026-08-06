@@ -7,15 +7,15 @@ A desktop app that adds EXIF-based watermark frames to photos. Rust owns all pro
 ### Metadata
 
 **Metadata**:
-The normalized, display-ready EXIF information of a registered image — a fixed set of 15 built-in fields plus orientation and density. Only normalized values may cross the application boundary.
+The display-ready EXIF information of a registered image — a fixed set of 15 built-in fields plus orientation and density. Numeric and enum fields cross the application boundary display-normalized at read time; make/model strings cross raw and are vendor-normalized by the renderer at render time.
 _Avoid_: EXIF blob, tags, raw metadata
 
 **Raw extracted value**:
-A value exactly as a metadata source (EXIF tag, future XMP/ffprobe source) reports it — unformatted, vendor-unwashed. Never leaves the metadata adapter.
+A value exactly as a metadata source (EXIF tag, future XMP/ffprobe source) reports it — unformatted, vendor-unwashed. Only make/model strings leave the metadata adapter raw; every other value is display-normalized inside it at read time.
 _Avoid_: raw EXIF, tag value
 
 **Normalized display value**:
-The canonical string form of a metadata field after domain-owned normalization rules (vendor name washing, Nikon `ℤ`/Roman numerals, Sony `α`, shutter `1/N` — sub-second exposures above 2/3s render as trimmed decimal seconds like `0.7` — etc.). Produced by `yiyin-domain`, applied by the application layer after the `MetadataReader` port returns raw extracted values; this is what templates render.
+The canonical string form of a metadata field after domain-owned normalization rules (vendor name washing, Nikon `ℤ`/Roman numerals, Sony `α`, shutter `1/N` — sub-second exposures above 2/3s render as trimmed decimal seconds like `0.7` — etc.). The rules live in `yiyin-domain`: the metadata adapter applies the numeric and enum ones at read time, the renderer applies the vendor make/model ones at render time, and this is what templates render. Moving all normalization behind the application layer is the deferred ENG-105 follow-up.
 _Avoid_: formatted EXIF, display string
 
 ### Configuration

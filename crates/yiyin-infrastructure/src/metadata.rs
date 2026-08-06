@@ -6,23 +6,11 @@ use std::{
 
 use exif::{Exif, Field, In, Tag, Value};
 use yiyin_application::{ApplicationError, MetadataReader};
-use yiyin_domain::{BuiltInField, ImageDensity, ImageOrientation, Metadata};
-
-const ROMAN_NUMERALS: &[(u32, &str)] = &[
-    (1_000, "M"),
-    (900, "CM"),
-    (500, "D"),
-    (400, "CD"),
-    (100, "C"),
-    (90, "XC"),
-    (50, "L"),
-    (40, "XL"),
-    (10, "X"),
-    (9, "IX"),
-    (5, "V"),
-    (4, "IV"),
-    (1, "I"),
-];
+use yiyin_domain::{
+    BuiltInField, ImageDensity, ImageOrientation, Metadata, decimal, format_shutter,
+    normalize_date_time, normalize_exposure_program, normalize_metering_mode,
+    normalize_white_balance, rounded_display, signed_decimal,
+};
 
 pub struct ExifMetadataReader;
 
@@ -248,126 +236,6 @@ fn rational_decimal(field: &Field) -> String {
     }
 }
 
-#[must_use]
-pub fn format_shutter(numerator: u32, denominator: u32) -> String {
-    if numerator == 0 || denominator == 0 {
-        return String::new();
-    }
-    let seconds = f64::from(numerator) / f64::from(denominator);
-    if seconds < 1.0 {
-        let reciprocal = 1.0 / seconds;
-        if reciprocal < 1.5 {
-            decimal(seconds)
-        } else {
-            format!("1/{:.0}", reciprocal.round())
-        }
-    } else {
-        decimal(seconds)
-    }
-}
-
-#[must_use]
-pub fn normalize_nikon_model(make: &str, model: &str) -> String {
-    let make = make.to_uppercase();
-    let without_make = model.replace(&make, "");
-    let with_logo = without_make
-        .chars()
-        .map(|character| match character {
-            'z' | 'Z' => 'ℤ',
-            other => other,
-        })
-        .collect::<String>();
-    let mut parts = with_logo.split('_').collect::<Vec<_>>();
-    if parts.len() <= 1 {
-        return with_logo;
-    }
-    let suffix = parts.pop().unwrap_or_default();
-    let suffix = suffix
-        .parse::<u32>()
-        .ok()
-        .and_then(to_roman)
-        .unwrap_or_else(|| suffix.to_owned());
-    format!("{} {suffix}", parts.join(" "))
-}
-
-#[must_use]
-pub fn normalize_sony_model(model: &str) -> String {
-    model.replacen("ILCE-", "α", 1).to_lowercase()
-}
-
-#[must_use]
-pub fn normalize_make(make: &str) -> String {
-    let make = make.replace("CORPORATION", "");
-    let make = make.trim();
-    let mut characters = make.chars();
-    let Some(first) = characters.next() else {
-        return String::new();
-    };
-    format!("{first}{}", characters.as_str().to_lowercase())
-}
-
-#[must_use]
-pub fn normalize_model_for_templates(make: &str, model: &str) -> String {
-    let lookup_make = make.replace("CORPORATION", "").trim().to_owned();
-    match lookup_make.as_str() {
-        "NIKON" => normalize_nikon_model(&lookup_make, model),
-        "SONY" => normalize_sony_model(model),
-        _ => model.to_lowercase(),
-    }
-}
-
-fn normalize_date_time(value: &str) -> String {
-    let Some((date, time)) = value.trim().split_once(' ') else {
-        return String::new();
-    };
-    let time = time.split(['+', '-', '.']).next().unwrap_or_default();
-    let date_parts = date.split(':').collect::<Vec<_>>();
-    let time_parts = time.split(':').collect::<Vec<_>>();
-    if date_parts.len() != 3
-        || time_parts.len() != 3
-        || date_parts
-            .iter()
-            .chain(&time_parts)
-            .any(|part| part.is_empty() || !part.bytes().all(|byte| byte.is_ascii_digit()))
-    {
-        return String::new();
-    }
-    format!(
-        "{}/{}/{} {}:{}:{}",
-        date_parts[0], date_parts[1], date_parts[2], time_parts[0], time_parts[1], time_parts[2]
-    )
-}
-
-fn normalize_white_balance(value: u32) -> &'static str {
-    match value {
-        0 => "Auto",
-        1 => "手动",
-        _ => "",
-    }
-}
-
-fn normalize_exposure_program(value: u32) -> &'static str {
-    match value {
-        0 => "Auto",
-        1 => "M",
-        2 => "P",
-        3 => "A",
-        4 => "S",
-        _ => "",
-    }
-}
-
-fn normalize_metering_mode(value: u32) -> &'static str {
-    match value {
-        1 => "平均测光",
-        2 => "中央重点测光",
-        3 => "点测光",
-        5 => "评价测光",
-        6 => "局部测光",
-        _ => "",
-    }
-}
-
 fn normalized_density(exif: &Exif) -> Option<ImageDensity> {
     let resolution = rational(exif, Tag::XResolution)?;
     let pixels_per_inch =
@@ -390,53 +258,6 @@ fn normalized_density(exif: &Exif) -> Option<ImageDensity> {
         pixels_per_inch.round() as u32
     };
     ImageDensity::new(rounded).ok()
-}
-
-fn rounded_display(value: f64) -> String {
-    format!("{:.0}", value.round())
-}
-
-fn signed_decimal(value: f64) -> String {
-    let value = decimal(value);
-    if value.is_empty() || value == "0" || value.starts_with('-') {
-        value
-    } else {
-        format!("+{value}")
-    }
-}
-
-fn decimal(value: f64) -> String {
-    if !value.is_finite() {
-        return String::new();
-    }
-    let mut result = format!("{value:.6}");
-    while result.contains('.') && result.ends_with('0') {
-        result.pop();
-    }
-    if result.ends_with('.') {
-        result.pop();
-    }
-    result
-}
-
-fn to_roman(value: u32) -> Option<String> {
-    if value == 0 || value > 3_999 {
-        return None;
-    }
-    if let Some(numeral) = ["Ⅰ", "Ⅱ", "Ⅲ", "Ⅳ", "Ⅴ", "Ⅵ", "Ⅶ", "Ⅷ", "Ⅸ", "Ⅹ", "Ⅺ", "Ⅻ"]
-        .get(usize::try_from(value - 1).ok()?)
-    {
-        return Some((*numeral).to_owned());
-    }
-    let mut remaining = value;
-    let mut result = String::new();
-    for &(number, numeral) in ROMAN_NUMERALS {
-        while remaining >= number {
-            result.push_str(numeral);
-            remaining -= number;
-        }
-    }
-    Some(result)
 }
 
 #[allow(

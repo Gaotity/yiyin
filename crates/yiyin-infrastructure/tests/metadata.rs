@@ -5,24 +5,7 @@ use std::{collections::BTreeMap, fs};
 
 use yiyin_application::{ErrorCode, MetadataReader};
 use yiyin_domain::{BuiltInField, ImageOrientation, Metadata};
-use yiyin_infrastructure::{
-    ExifMetadataReader, format_shutter, normalize_nikon_model, normalize_sony_model,
-};
-
-#[test]
-fn vendor_model_formatting_matches_the_legacy_template_formatter() {
-    assert_eq!(normalize_nikon_model("NIKON", "NIKON Z 7_2"), " ℤ 7 Ⅱ");
-    assert_eq!(normalize_sony_model("ILCE-7RM5"), "α7rm5");
-}
-
-#[test]
-fn shutter_formatting_preserves_fractional_and_whole_seconds() {
-    assert_eq!(format_shutter(1, 125), "1/125");
-    assert_eq!(format_shutter(2, 1), "2");
-    assert_eq!(format_shutter(3, 2), "1.5");
-    assert_eq!(format_shutter(0, 1), "");
-    assert_eq!(format_shutter(1, 0), "");
-}
+use yiyin_infrastructure::ExifMetadataReader;
 
 #[test]
 fn every_manifest_scenario_metadata_matches_the_frozen_capture() {
@@ -144,16 +127,4 @@ fn missing_and_malformed_files_map_to_stable_errors() {
         ExifMetadataReader.read(&malformed).unwrap_err().code(),
         ErrorCode::FileInvalid
     );
-}
-
-#[test]
-fn sub_second_shutter_above_two_thirds_displays_decimal_seconds() {
-    assert_eq!(format_shutter(7, 10), "0.7");
-    assert_eq!(format_shutter(4, 5), "0.8");
-    assert_eq!(format_shutter(3, 4), "0.75");
-    // At and below the two-thirds boundary the legacy reciprocal stays.
-    assert_eq!(format_shutter(2, 3), "1/2");
-    assert_eq!(format_shutter(5, 8), "1/2");
-    // One second and above keep the seconds display.
-    assert_eq!(format_shutter(1, 1), "1");
 }

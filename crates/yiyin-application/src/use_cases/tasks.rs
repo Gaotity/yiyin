@@ -159,7 +159,8 @@ impl PreviewTask {
         }
     }
 
-    /// Replaces the dedicated preview slot with a frozen quality-70 request.
+    /// Replaces the dedicated preview slot with a request frozen at the
+    /// domain's `Quality::PREVIEW` (ADR 0001).
     ///
     /// # Errors
     ///
@@ -175,9 +176,7 @@ impl PreviewTask {
         // the gateway keeps the name and the retry becomes a phantom gap.
         release_terminal_reservations(self.tasks.as_ref(), self.output.as_ref())?;
         let mut config = self.config.load()?;
-        config.options.quality = Quality::try_from(70_u8).map_err(|_| {
-            ApplicationError::internal("the domain rejected the fixed preview quality")
-        })?;
+        config.options.quality = Quality::PREVIEW;
         let output_name = resolve_output_name(task.display_name(), &BTreeSet::new())?;
         let request = build_request(
             &task,
