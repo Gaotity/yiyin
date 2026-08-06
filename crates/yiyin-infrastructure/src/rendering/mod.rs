@@ -13,13 +13,12 @@ use yiyin_application::{
     ResourceSnapshot,
 };
 use yiyin_domain::{
-    BackgroundKind, BuiltInField, FieldValues, ImageDensity, ImageOrientation, RenderPlan,
-    RenderRequest, RenderStage, ResourceKind, TemplateField, plan_rows,
+    BackgroundKind, BuiltInField, FieldValues, ImageDensity, ImageOrientation, Quality, RenderPlan,
+    RenderRequest, RenderStage, ResourceKind, TemplateField, normalize_make,
+    normalize_model_for_templates, plan_rows,
 };
 
-use crate::{
-    FileSystem, ResourceRegistry, StdFileSystem, normalize_make, normalize_model_for_templates,
-};
+use crate::{FileSystem, ResourceRegistry, StdFileSystem};
 
 const BUILT_IN_LOGO_VENDORS: [&str; 13] = [
     "canon",
@@ -228,7 +227,7 @@ impl RustImageRenderer {
         cancellation: &dyn CancellationProbe,
     ) -> Result<RenderResult, ApplicationError> {
         let quality = if request.is_preview() {
-            70
+            Quality::PREVIEW.get()
         } else {
             request.options().quality.get()
         };

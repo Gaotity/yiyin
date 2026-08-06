@@ -11,7 +11,9 @@ use faulty_filesystem::{FaultPoint, FaultyFileSystem};
 use yiyin_application::{
     CancellationProbe, ErrorCode, ImageRenderer, MetadataReader, ResourceRecord, ResourceRepository,
 };
-use yiyin_domain::{Config, ImageDimensions, RenderRequest, RenderStage, ResourceKind, TaskId};
+use yiyin_domain::{
+    Config, ImageDimensions, Quality, RenderRequest, RenderStage, ResourceKind, TaskId,
+};
 use yiyin_infrastructure::{ExifMetadataReader, FileSystem, ResourceRegistry, RustImageRenderer};
 
 fn fixtures() -> PathBuf {
@@ -201,7 +203,7 @@ fn jpeg_png_and_webp_decode_and_export_atomically() {
 }
 
 #[test]
-fn preview_uses_quality_seventy_without_publishing_an_export() {
+fn preview_uses_the_domain_preview_quality_without_publishing_an_export() {
     let harness = Harness::new();
     let request = harness.request("landscape-default.jpg", true);
 
@@ -210,7 +212,7 @@ fn preview_uses_quality_seventy_without_publishing_an_export() {
         .render(&request, &NeverCancelled, &mut |_| {})
         .expect("render preview");
 
-    assert_eq!(result.encoder_quality(), 70);
+    assert_eq!(result.encoder_quality(), Quality::PREVIEW.get());
     assert_eq!(result.resource().kind(), ResourceKind::Preview);
     assert!(
         !harness

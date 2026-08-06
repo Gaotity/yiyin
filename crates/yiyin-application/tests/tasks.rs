@@ -528,7 +528,7 @@ fn newer_preview_supersedes_the_previous_preview_without_reserving_output() {
     let request = harness.queue.preview().expect("latest preview");
     assert_eq!(request.task_id(), &second);
     assert!(request.is_preview());
-    assert_eq!(request.options().quality.get(), 70);
+    assert_eq!(request.options().quality, Quality::PREVIEW);
     assert_eq!(harness.queue.superseded_previews(), [first]);
     assert!(harness.output.reservations().is_empty());
 }

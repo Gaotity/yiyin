@@ -104,6 +104,12 @@ macro_rules! bounded_decimal {
 bounded_integer!(MainImageWidth, u8, "main_img_w_rate", 1, 100);
 bounded_integer!(Quality, u8, "quality", 1, 100);
 bounded_integer!(BackgroundBlur, u8, "bg_blur", 0, 100);
+
+impl Quality {
+    /// The fixed preview render quality (ADR 0001) — a single product
+    /// constant consumed by both the preview use case and the renderer.
+    pub const PREVIEW: Self = Self(70);
+}
 bounded_decimal!(Radius, "radius", 0.0, 50.0, 1);
 bounded_decimal!(Shadow, "shadow", 0.0, 50.0, 1);
 bounded_decimal!(TextMargin, "text_margin", 0.0, 10_000.0, 2);
@@ -400,6 +406,11 @@ mod tests {
         assert_eq!(config.options.mini_top_bottom_margin.get(), 0.0);
         assert_eq!(config.options.background_blur.get(), 100);
         assert!(!config.options.preview_visible);
+    }
+
+    #[test]
+    fn preview_quality_is_the_pinned_product_value() {
+        assert_eq!(Quality::PREVIEW.get(), 70);
     }
 
     #[test]
