@@ -133,6 +133,25 @@ fn embedded_family(bytes: &[u8]) -> Option<String> {
         .map(|(name, _)| name.clone())
 }
 
+struct SlotImage {
+    image: RgbaImage,
+    baseline: SlotBaseline,
+}
+
+#[derive(Clone, Copy)]
+enum SlotBaseline {
+    /// Text slot: offset of the shaped line baseline from the slot's top edge.
+    Text { baseline: f64, size: f64 },
+    /// Logo slot: carries no baseline of its own; it borrows the text's.
+    Logo,
+}
+
+struct RasterizedText {
+    image: RgbaImage,
+    /// Offset of the first line's baseline from the top edge, in pixels.
+    baseline: f64,
+}
+
 #[allow(
     clippy::cast_possible_truncation,
     clippy::too_many_arguments,
@@ -150,41 +169,34 @@ fn rasterize_row(
     font_system: &mut FontSystem,
     cache: &mut SwashCache,
 ) -> Result<RgbaImage, ApplicationError> {
+    // A logo only needs to share the text baseline when the row has text to
+    // align with; image-only rows keep the em-square sizing.
+    let aligns_with_text = plan
+        .slots()
+        .iter()
+        .any(|slot| matches!(slot, RowSlot::Text { .. }));
     let mut slots = Vec::new();
     for slot in plan.slots() {
-        match slot {
-            RowSlot::Text { value, font } => slots.push(rasterize_text(
-                value,
-                font,
-                background_height,
-                default_family,
-                default_color,
-                aliases,
-                font_system,
-                cache,
-            )?),
-            RowSlot::Image { resource, font } => {
-                let record = resources.resolve(resource)?;
-                let bytes = filesystem
-                    .read(record.source())
-                    .map_err(|_| ApplicationError::file_invalid())?;
-                let source = image::load_from_memory(&bytes)
-                    .map_err(|_| ApplicationError::file_invalid())?
-                    .to_rgba8();
-                let height = font_pixels(font, background_height).ceil().max(1.0);
-                let width = height * f64::from(source.width()) / f64::from(source.height());
-                slots.push(image::imageops::resize(
-                    &source,
-                    checked_dimension(width)?,
-                    checked_dimension(height)?,
-                    FilterType::Lanczos3,
-                ));
-            }
-        }
+        slots.push(rasterize_slot(
+            slot,
+            aligns_with_text,
+            background_height,
+            default_family,
+            default_color,
+            resources,
+            filesystem,
+            aliases,
+            font_system,
+            cache,
+        )?);
     }
     let padding = 30_u32;
     let margin = f64::from(background_height) * (text_margin_percent / 100.0);
-    let content_height = slots.iter().map(RgbaImage::height).max().unwrap_or(1);
+    let content_height = slots
+        .iter()
+        .map(|slot| slot.image.height())
+        .max()
+        .unwrap_or(1);
     let computed_height = checked_dimension(f64::from(content_height) + margin * 2.0)?;
     let height = plan
         .height()
@@ -194,22 +206,117 @@ fn rasterize_row(
         .max(1);
     let width = slots
         .iter()
-        .try_fold(padding, |width, slot| width.checked_add(slot.width()))
+        .try_fold(padding, |width, slot| width.checked_add(slot.image.width()))
         .ok_or_else(|| ApplicationError::internal("text row is too wide"))?;
     let mut row = RgbaImage::from_pixel(width, height, Rgba([0, 0, 0, 0]));
+    // The legacy canvas renderer put every text slot on one baseline and sat
+    // each logo's bottom on it (dipped 3% of the logo height). The reference
+    // is the largest text slot, matching legacy's max-font baseline.
+    let text_baseline = match plan.vertical_align() {
+        VerticalAlign::Baseline => slots
+            .iter()
+            .filter_map(|slot| match slot.baseline {
+                SlotBaseline::Text { baseline, size } => {
+                    Some((size, slot.image.height(), baseline))
+                }
+                SlotBaseline::Logo => None,
+            })
+            .max_by(|left, right| left.0.total_cmp(&right.0))
+            .map(|(_, slot_height, baseline)| {
+                (f64::from(height) * 0.72 - f64::from(slot_height) * 0.72).round() + baseline
+            }),
+        VerticalAlign::Center => None,
+    };
     let mut x = i64::from(padding / 2);
     for slot in slots {
+        let slot_height = slot.image.height();
         let y = match plan.vertical_align() {
-            VerticalAlign::Center => (i64::from(height) - i64::from(slot.height())) / 2,
+            VerticalAlign::Center => (i64::from(height) - i64::from(slot_height)) / 2,
             VerticalAlign::Baseline => {
-                let baseline = f64::from(height) * 0.72;
-                (baseline - f64::from(slot.height()) * 0.72).round() as i64
+                if let (SlotBaseline::Logo, Some(baseline)) = (slot.baseline, text_baseline) {
+                    (baseline - f64::from(slot_height) * 0.97).round() as i64
+                } else {
+                    let baseline = f64::from(height) * 0.72;
+                    (baseline - f64::from(slot_height) * 0.72).round() as i64
+                }
             }
         };
-        super::composite::overlay_rgba(&mut row, &slot, x, y);
-        x += i64::from(slot.width());
+        super::composite::overlay_rgba(&mut row, &slot.image, x, y);
+        x += i64::from(slot.image.width());
     }
     Ok(row)
+}
+
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the arguments are explicit rendering context shared with rasterize_row"
+)]
+fn rasterize_slot(
+    slot: &RowSlot,
+    aligns_with_text: bool,
+    background_height: u32,
+    default_family: &str,
+    default_color: Rgba<u8>,
+    resources: &ResourceRegistry,
+    filesystem: &dyn FileSystem,
+    aliases: &HashMap<String, String>,
+    font_system: &mut FontSystem,
+    cache: &mut SwashCache,
+) -> Result<SlotImage, ApplicationError> {
+    match slot {
+        RowSlot::Text { value, font } => {
+            let rendered = rasterize_text(
+                value,
+                font,
+                background_height,
+                default_family,
+                default_color,
+                aliases,
+                font_system,
+                cache,
+            )?;
+            Ok(SlotImage {
+                image: rendered.image,
+                baseline: SlotBaseline::Text {
+                    baseline: rendered.baseline,
+                    size: font_pixels(font, background_height),
+                },
+            })
+        }
+        RowSlot::Image { resource, font } => {
+            let record = resources.resolve(resource)?;
+            let bytes = filesystem
+                .read(record.source())
+                .map_err(|_| ApplicationError::file_invalid())?;
+            let source = image::load_from_memory(&bytes)
+                .map_err(|_| ApplicationError::file_invalid())?
+                .to_rgba8();
+            let height = if aligns_with_text {
+                logo_ink_ascent(
+                    font,
+                    background_height,
+                    default_family,
+                    default_color,
+                    aliases,
+                    font_system,
+                    cache,
+                )?
+            } else {
+                font_pixels(font, background_height)
+            };
+            let height = height.ceil().max(1.0);
+            let width = height * f64::from(source.width()) / f64::from(source.height());
+            Ok(SlotImage {
+                image: image::imageops::resize(
+                    &source,
+                    checked_dimension(width)?,
+                    checked_dimension(height)?,
+                    FilterType::Lanczos3,
+                ),
+                baseline: SlotBaseline::Logo,
+            })
+        }
+    }
 }
 
 #[allow(
@@ -225,7 +332,7 @@ fn rasterize_text(
     aliases: &HashMap<String, String>,
     font_system: &mut FontSystem,
     cache: &mut SwashCache,
-) -> Result<RgbaImage, ApplicationError> {
+) -> Result<RasterizedText, ApplicationError> {
     #[allow(
         clippy::cast_possible_truncation,
         reason = "bounded font pixels are intentionally converted for cosmic-text metrics"
@@ -253,12 +360,16 @@ fn rasterize_text(
     }
     buffer.set_text(value, &attrs, Shaping::Advanced, None);
     buffer.shape_until_scroll(font_system, false);
-    let width = buffer
-        .layout_runs()
-        .map(|run| f64::from(run.line_w))
-        .fold(0.0_f64, f64::max)
-        .ceil()
-        .max(1.0);
+    let mut baseline = None;
+    let mut width = 0.0_f64;
+    for run in buffer.layout_runs() {
+        if baseline.is_none() {
+            baseline = Some(f64::from(run.line_y));
+        }
+        width = width.max(f64::from(run.line_w));
+    }
+    let baseline = baseline.unwrap_or(f64::from(line_height) * 0.8);
+    let width = width.ceil().max(1.0);
     let height = f64::from(line_height).ceil().max(1.0);
     let mut image = RgbaImage::from_pixel(
         checked_dimension(width)?,
@@ -287,7 +398,52 @@ fn rasterize_text(
             }
         },
     );
-    Ok(image)
+    Ok(RasterizedText { image, baseline })
+}
+
+/// Measures the inked ascent of a capital probe string — the vertical band a
+/// vendor logo must fill to read as a sibling of the row's capital letters.
+/// The legacy canvas renderer sized logos to `actualBoundingBoxAscent` of the
+/// same probe; scanning the shaped ink above the baseline reproduces it.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the arguments are the explicit deterministic glyph rendering context"
+)]
+fn logo_ink_ascent(
+    font: &FontSpec,
+    background_height: u32,
+    default_family: &str,
+    default_color: Rgba<u8>,
+    aliases: &HashMap<String, String>,
+    font_system: &mut FontSystem,
+    cache: &mut SwashCache,
+) -> Result<f64, ApplicationError> {
+    let probe = rasterize_text(
+        "QSOPNYuiyl90",
+        font,
+        background_height,
+        default_family,
+        default_color,
+        aliases,
+        font_system,
+        cache,
+    )?;
+    let mut ink_top = None;
+    'scan: for y in 0..probe.image.height() {
+        if f64::from(y) >= probe.baseline {
+            break;
+        }
+        for x in 0..probe.image.width() {
+            if probe.image.get_pixel(x, y)[3] >= 8 {
+                ink_top = Some(y);
+                break 'scan;
+            }
+        }
+    }
+    Ok(ink_top.map_or_else(
+        || font_pixels(font, background_height),
+        |top| probe.baseline - f64::from(top),
+    ))
 }
 
 fn font_pixels(font: &FontSpec, background_height: u32) -> f64 {
@@ -388,5 +544,153 @@ mod tests {
         .expect("load fonts");
 
         assert_eq!(catalog.aliases["My Neon"], "Neoneon");
+    }
+
+    /// Ink bounds of a row region, all edges inclusive.
+    struct InkBox {
+        top: u32,
+        bottom: u32,
+    }
+
+    fn inked_columns(image: &RgbaImage) -> Vec<u32> {
+        (0..image.width())
+            .filter(|&x| (0..image.height()).any(|y| image.get_pixel(x, y)[3] >= 8))
+            .collect()
+    }
+
+    fn column_runs(columns: &[u32]) -> Vec<(u32, u32)> {
+        let mut runs: Vec<(u32, u32)> = Vec::new();
+        for &x in columns {
+            match runs.last_mut() {
+                Some((_, end)) if x == *end + 1 => *end = x,
+                _ => runs.push((x, x)),
+            }
+        }
+        runs
+    }
+
+    fn ink_bbox(image: &RgbaImage, columns: &[u32]) -> Option<InkBox> {
+        let mut top = u32::MAX;
+        let mut bottom = 0;
+        for &x in columns {
+            for y in 0..image.height() {
+                if image.get_pixel(x, y)[3] >= 8 {
+                    top = top.min(y);
+                    bottom = bottom.max(y);
+                }
+            }
+        }
+        (top <= bottom).then_some(InkBox { top, bottom })
+    }
+
+    #[test]
+    fn logo_slot_sits_on_the_text_baseline_like_legacy() {
+        use yiyin_domain::{
+            BuiltInField, FieldValues, Metadata, default_template_fields, default_templates,
+            plan_rows,
+        };
+
+        let directory = tempfile::tempdir().expect("create resource directory");
+        let resources =
+            ResourceRegistry::new(directory.path().join("owned")).expect("create resources");
+        // An opaque 4:1 wordmark stand-in: its ink fills the whole canvas, so
+        // the inked bbox of the rendered logo slot equals the slot rect.
+        let logo_path = directory.path().join("logo.png");
+        RgbaImage::from_pixel(400, 100, Rgba([20, 20, 20, 255]))
+            .save(&logo_path)
+            .expect("write logo fixture");
+        let logo = resources
+            .register_owned(yiyin_domain::ResourceKind::Overlay, &logo_path, "Test logo")
+            .expect("register logo");
+
+        let mut metadata = Metadata::default();
+        metadata.set(BuiltInField::Make, "Nikon");
+        metadata.set(BuiltInField::Model, "Z 8");
+        let mut fields = default_template_fields();
+        fields
+            .iter_mut()
+            .find(|field| field.key().as_str() == "Make")
+            .expect("built-in Make field")
+            .set_image_variants(Some(logo.id().clone()), Some(logo.id().clone()));
+        let plans = plan_rows(
+            &default_templates()[..1],
+            &FieldValues::new(metadata, fields),
+            BackgroundKind::Dark,
+        );
+        assert_eq!(plans.len(), 1, "the make-model row should plan");
+
+        let bundled_fonts =
+            vec![include_bytes!("../../../../assets/fonts/千图小兔体.ttf").to_vec()];
+        let context = RasterContext {
+            background: BackgroundKind::Dark,
+            background_height: 2000,
+            text_margin_percent: 0.4,
+            default_family: "QTxiaotu",
+            bundled_fonts: &bundled_fonts,
+            resources: &resources,
+            filesystem: &StdFileSystem,
+        };
+        let rows = rasterize_rows(&plans, &context, &[]).expect("rasterize row");
+        let row = &rows[0].image;
+
+        // The logo, the space slot, and the "Z 8" glyphs form separate ink
+        // column runs; the first run is the logo, the rest are text.
+        let runs = column_runs(&inked_columns(row));
+        assert!(
+            runs.len() >= 2,
+            "logo and text should form separate ink runs, got {runs:?}"
+        );
+        let logo_columns: Vec<u32> = (runs[0].0..=runs[0].1).collect();
+        let text_columns: Vec<u32> = runs[1..]
+            .iter()
+            .flat_map(|&(start, end)| start..=end)
+            .collect();
+        let logo_box = ink_bbox(row, &logo_columns).expect("logo ink");
+        let text_box = ink_bbox(row, &text_columns).expect("text ink");
+
+        let logo_height = f64::from(logo_box.bottom) - f64::from(logo_box.top) + 1.0;
+        let cap_height = f64::from(text_box.bottom) - f64::from(text_box.top) + 1.0;
+        let bottom_drift = f64::from(logo_box.bottom) - f64::from(text_box.bottom);
+        let center_drift = ((f64::from(logo_box.top) + f64::from(logo_box.bottom))
+            - (f64::from(text_box.top) + f64::from(text_box.bottom)))
+        .abs()
+            / 2.0;
+
+        if std::env::var_os("YIYIN_TEXT_ROW_DUMP").is_some() {
+            let artifacts = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../../target/text-row-alignment");
+            std::fs::create_dir_all(&artifacts).expect("create artifacts directory");
+            row.save(artifacts.join("row.png")).expect("dump row");
+            image::imageops::resize(row, row.width() * 4, row.height() * 4, FilterType::Nearest)
+                .save(artifacts.join("row-4x.png"))
+                .expect("dump magnified row");
+            eprintln!(
+                "logo bbox: top={} bottom={} | text bbox: top={} bottom={}",
+                logo_box.top, logo_box.bottom, text_box.top, text_box.bottom
+            );
+            eprintln!(
+                "logo_height={logo_height} cap_height={cap_height} \
+                 bottom_drift={bottom_drift} center_drift={center_drift}"
+            );
+        }
+
+        // The legacy v1.x canvas renderer sized a logo to the font's inked
+        // ascent (the cap-height band) and sat its bottom on the text
+        // baseline (dipped 3% of the logo height). "Z 8" has no descenders,
+        // so the text ink bottom is the baseline.
+        let height_ratio = logo_height / cap_height;
+        assert!(
+            (0.85..=1.30).contains(&height_ratio),
+            "logo height should match the text cap band: ratio {height_ratio:.3} \
+             (logo {logo_height}px vs cap band {cap_height}px)"
+        );
+        assert!(
+            (-2.0..=0.08 * logo_height + 2.0).contains(&bottom_drift),
+            "logo bottom should sit on the text baseline: drift {bottom_drift}px"
+        );
+        assert!(
+            center_drift <= 0.12 * cap_height + 2.0,
+            "logo and text ink should share a visual center: drift {center_drift}px"
+        );
     }
 }
