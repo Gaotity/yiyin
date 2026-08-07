@@ -360,6 +360,205 @@ fn density_is_preserved_in_the_published_jpeg() {
     );
 }
 
+/// Extracts and reassembles the ICC profile chunks from JPEG APP2 segments.
+fn jpeg_icc_profile(bytes: &[u8]) -> Option<Vec<u8>> {
+    let mut chunks = Vec::new();
+    let mut cursor = 2;
+    while cursor + 4 <= bytes.len() {
+        if bytes[cursor] != 0xff {
+            cursor += 1;
+            continue;
+        }
+        let marker = bytes[cursor + 1];
+        if marker == 0xda {
+            break;
+        }
+        if marker == 0xd8 || marker == 0xd9 || (0xd0..=0xd7).contains(&marker) {
+            cursor += 2;
+            continue;
+        }
+        let length = usize::from(u16::from_be_bytes([bytes[cursor + 2], bytes[cursor + 3]]));
+        let segment = &bytes[cursor + 4..cursor + 2 + length];
+        if marker == 0xe2 && segment.starts_with(b"ICC_PROFILE\0") && segment.len() > 14 {
+            chunks.push((segment[12], &segment[14..]));
+        }
+        cursor += 2 + length;
+    }
+    if chunks.is_empty() {
+        return None;
+    }
+    chunks.sort_by_key(|(sequence, _)| *sequence);
+    Some(
+        chunks
+            .into_iter()
+            .flat_map(|(_, payload)| payload.to_vec())
+            .collect(),
+    )
+}
+
+#[test]
+fn the_published_jpeg_preserves_the_source_icc_profile() {
+    let harness = Harness::new();
+    let source = fixtures().join("landscape-default.jpg");
+    let expected = jpeg_icc_profile(&fs::read(&source).expect("read source"))
+        .expect("the fixture carries an ICC profile");
+    let request = harness.request("landscape-default.jpg", false);
+
+    let result = harness
+        .renderer
+        .render(&request, &NeverCancelled, &mut |_| {})
+        .expect("render export");
+    let output = harness
+        .registry
+        .resolve(result.resource().id())
+        .expect("resolve output");
+    let actual = jpeg_icc_profile(&fs::read(output.source()).expect("read output"));
+
+    assert_eq!(
+        actual.as_deref(),
+        Some(expected.as_slice()),
+        "the export must carry the source ICC profile like the legacy renderer did"
+    );
+}
+
+/// JPEG APP2 segments hold at most 65533 bytes, the ICC chunking header takes
+/// 14, and at most 255 chunks are addressable — the format-level ceiling an
+/// encoder can embed.
+const APP2_ICC_PROFILE_LIMIT: usize = (65533 - 14) * 255;
+
+/// Wraps `data` in a zlib stream of stored (uncompressed) deflate blocks, so
+/// tests can craft a PNG iCCP chunk without extra dependencies.
+fn zlib_store(data: &[u8]) -> Vec<u8> {
+    let mut out = vec![0x78, 0x01];
+    let mut blocks = data.chunks(65_535).peekable();
+    if blocks.peek().is_none() {
+        out.extend_from_slice(&[0x01, 0x00, 0x00, 0xff, 0xff]);
+    }
+    while let Some(block) = blocks.next() {
+        out.push(u8::from(blocks.peek().is_none()));
+        let length = u16::try_from(block.len()).expect("a stored block fits u16");
+        out.extend_from_slice(&length.to_le_bytes());
+        out.extend_from_slice(&(!length).to_le_bytes());
+        out.extend_from_slice(block);
+    }
+    out.extend_from_slice(&adler32(data).to_be_bytes());
+    out
+}
+
+fn adler32(data: &[u8]) -> u32 {
+    const MOD_ADLER: u32 = 65_521;
+    let mut a = 1_u32;
+    let mut b = 0_u32;
+    for byte in data {
+        a = (a + u32::from(*byte)) % MOD_ADLER;
+        b = (b + a) % MOD_ADLER;
+    }
+    (b << 16) | a
+}
+
+/// CRC-32 (IEEE, reflected) as PNG chunks use it.
+fn png_crc32(bytes: &[u8]) -> u32 {
+    let mut table = [0_u32; 256];
+    for (index, entry) in table.iter_mut().enumerate() {
+        let mut value = u32::try_from(index).expect("the table index fits u32");
+        for _ in 0..8 {
+            value = if value & 1 == 1 {
+                (value >> 1) ^ 0xEDB8_8320
+            } else {
+                value >> 1
+            };
+        }
+        *entry = value;
+    }
+    !bytes.iter().fold(!0_u32, |crc, byte| {
+        let slot = usize::from(u8::try_from((crc ^ u32::from(*byte)) & 0xff).expect("masked"));
+        table[slot] ^ (crc >> 8)
+    })
+}
+
+#[test]
+fn an_oversized_icc_profile_is_skipped_instead_of_failing_the_export() {
+    let harness = Harness::new();
+    let mut profile = vec![0_u8; APP2_ICC_PROFILE_LIMIT + 1];
+    profile[16..20].copy_from_slice(b"RGB ");
+    // The fixture carries its iCCP chunk right after IHDR; swap in the
+    // oversized profile (a JPEG source physically cannot exceed the APP2
+    // chunking limit, a PNG iCCP chunk can).
+    let fixture = fs::read(fixtures().join("portrait-default.png")).expect("read fixture");
+    let mut position = 8;
+    let (mut iccp_start, mut iccp_end) = (0, 0);
+    while position + 8 <= fixture.len() {
+        let length = u32::from_be_bytes(
+            fixture[position..position + 4]
+                .try_into()
+                .expect("chunk length"),
+        );
+        let end = position + 12 + usize::try_from(length).expect("chunk length fits usize");
+        if fixture[position + 4..position + 8] == *b"iCCP" {
+            iccp_start = position;
+            iccp_end = end;
+            break;
+        }
+        position = end;
+    }
+    assert!(iccp_end > 0, "the fixture carries an iCCP chunk");
+    let mut iccp = b"oversized\0\0".to_vec();
+    iccp.extend_from_slice(&zlib_store(&profile));
+    let mut chunk = Vec::new();
+    chunk.extend_from_slice(
+        &u32::try_from(iccp.len())
+            .expect("chunk length fits u32")
+            .to_be_bytes(),
+    );
+    chunk.extend_from_slice(b"iCCP");
+    chunk.extend_from_slice(&iccp);
+    let mut crc_input = b"iCCP".to_vec();
+    crc_input.extend_from_slice(&iccp);
+    chunk.extend_from_slice(&png_crc32(&crc_input).to_be_bytes());
+    let mut crafted = fixture[..iccp_start].to_vec();
+    crafted.extend_from_slice(&chunk);
+    crafted.extend_from_slice(&fixture[iccp_end..]);
+    let source = harness.temp.path().join("oversized-icc.png");
+    fs::write(&source, &crafted).expect("write crafted source");
+
+    let resource = harness
+        .registry
+        .register_input(&source)
+        .expect("register crafted source");
+    let metadata = ExifMetadataReader
+        .read(&source)
+        .expect("read metadata")
+        .unwrap_or_default();
+    let mut config = Config::default();
+    for template in &mut config.templates {
+        template.set_enabled(false);
+    }
+    let mut request = RenderRequest::freeze(
+        TaskId::try_from("oversized-icc").expect("task id"),
+        resource.id().clone(),
+        "oversized-icc.jpg",
+        resource.dimensions().expect("image dimensions"),
+        config,
+        metadata,
+    );
+    if let Some(density) = resource.density() {
+        request = request.with_density(density);
+    }
+    let result = harness
+        .renderer
+        .render(&request, &NeverCancelled, &mut |_| {})
+        .expect("an oversized ICC profile must not fail the export");
+    let output = harness
+        .registry
+        .resolve(result.resource().id())
+        .expect("resolve output");
+    assert_eq!(
+        jpeg_icc_profile(&fs::read(output.source()).expect("read output")),
+        None,
+        "a profile past the APP2 chunking limit must be skipped, not embedded"
+    );
+}
+
 #[test]
 fn cancellation_and_existing_outputs_never_publish_partial_bytes() {
     let harness = Harness::new();
