@@ -7,7 +7,7 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-use image::{DynamicImage, ImageEncoder, RgbaImage, codecs::jpeg::JpegEncoder};
+use image::{DynamicImage, ImageDecoder, ImageEncoder, RgbaImage, codecs::jpeg::JpegEncoder};
 use yiyin_application::{
     ApplicationError, CancellationProbe, ImageRenderer, RenderResult, ResourceRepository,
     ResourceSnapshot,
@@ -135,8 +135,7 @@ impl RustImageRenderer {
         advance(cancellation, progress, RenderStage::Initializing)?;
         let input = self.resources.resolve(request.input())?;
         let bytes = self.filesystem.read(input.source()).map_err(internal_io)?;
-        let decoded =
-            image::load_from_memory(&bytes).map_err(|_| ApplicationError::file_invalid())?;
+        let (decoded, icc_profile) = decode_source(&bytes)?;
         let main = apply_orientation(decoded, request.metadata().orientation()).to_rgba8();
         if main.width() != request.input_dimensions().width
             || main.height() != request.input_dimensions().height
@@ -214,7 +213,13 @@ impl RustImageRenderer {
         }
         ensure_active(cancellation)?;
 
-        let result = self.publish(request, &canvas, &plan, cancellation)?;
+        let result = self.publish(
+            request,
+            &canvas,
+            &plan,
+            icc_profile.as_deref(),
+            cancellation,
+        )?;
         progress(RenderStage::Completed);
         Ok(result)
     }
@@ -224,6 +229,7 @@ impl RustImageRenderer {
         request: &RenderRequest,
         canvas: &RgbaImage,
         plan: &RenderPlan,
+        icc_profile: Option<&[u8]>,
         cancellation: &dyn CancellationProbe,
     ) -> Result<RenderResult, ApplicationError> {
         let quality = if request.is_preview() {
@@ -232,7 +238,7 @@ impl RustImageRenderer {
             request.options().quality.get()
         };
         let density = request.density();
-        let encoded = encode_jpeg(canvas, quality, density)?;
+        let encoded = encode_jpeg(canvas, quality, density, icc_profile)?;
         let (kind, destination) = if request.is_preview() {
             (
                 ResourceKind::Preview,
@@ -360,25 +366,58 @@ fn apply_orientation(image: DynamicImage, orientation: Option<ImageOrientation>)
     }
 }
 
+fn decode_source(bytes: &[u8]) -> Result<(DynamicImage, Option<Vec<u8>>), ApplicationError> {
+    let mut decoder = image::ImageReader::new(std::io::Cursor::new(bytes))
+        .with_guessed_format()
+        .map_err(|_| ApplicationError::file_invalid())?
+        .into_decoder()
+        .map_err(|_| ApplicationError::file_invalid())?;
+    // The source profile is carried into the export like the legacy renderer
+    // did; extracting it is best-effort and never fails a render.
+    let icc_profile = decoder.icc_profile().ok().flatten();
+    let pixels =
+        DynamicImage::from_decoder(decoder).map_err(|_| ApplicationError::file_invalid())?;
+    Ok((pixels, icc_profile))
+}
+
+/// JPEG APP2 segments carry at most 65533 bytes; the ICC chunking scheme
+/// spends 14 of them on the `ICC_PROFILE` header and addresses at most 255
+/// chunks. Matches the limit the image crate's encoder enforces at write
+/// time — checked up front here so an oversized profile is skipped instead
+/// of failing the export.
+const MAX_EMBEDDABLE_ICC_PROFILE_SIZE: usize = (65533 - 14) * 255;
+
 fn encode_jpeg(
     canvas: &RgbaImage,
     quality: u8,
     density: Option<ImageDensity>,
+    icc_profile: Option<&[u8]>,
 ) -> Result<Vec<u8>, ApplicationError> {
     let rgb = DynamicImage::ImageRgba8(canvas.clone()).to_rgb8();
     let mut encoded = Vec::new();
-    JpegEncoder::new_with_quality(&mut encoded, quality)
-        .write_image(
-            rgb.as_raw(),
-            rgb.width(),
-            rgb.height(),
-            image::ExtendedColorType::Rgb8,
-        )
-        .map_err(|error| ApplicationError::internal(error.to_string()))?;
+    let mut jpeg = JpegEncoder::new_with_quality(&mut encoded, quality);
+    if let Some(profile) = icc_profile.filter(|profile| {
+        is_rgb_icc_profile(profile) && profile.len() <= MAX_EMBEDDABLE_ICC_PROFILE_SIZE
+    }) {
+        let _ = jpeg.set_icc_profile(profile.to_vec());
+    }
+    jpeg.write_image(
+        rgb.as_raw(),
+        rgb.width(),
+        rgb.height(),
+        image::ExtendedColorType::Rgb8,
+    )
+    .map_err(|error| ApplicationError::internal(error.to_string()))?;
     if let Some(density) = density {
         insert_density_exif(&mut encoded, density.get())?;
     }
     Ok(encoded)
+}
+
+/// The canvas holds RGB pixels, so only an RGB profile describes them; a
+/// gray or CMYK source profile would misinterpret the encoded data.
+fn is_rgb_icc_profile(profile: &[u8]) -> bool {
+    profile.len() >= 20 && profile[16..20] == *b"RGB "
 }
 
 fn insert_density_exif(encoded: &mut Vec<u8>, density: u32) -> Result<(), ApplicationError> {
